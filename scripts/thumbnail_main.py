@@ -5,7 +5,8 @@ from concurrent.futures.process import ProcessPoolExecutor
 import math
 from multiprocessing import get_context
 import os
-
+import time
+from feabas.time_region import time_region
 from feabas import config, logging
 
 
@@ -249,8 +250,6 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
         except Exception as err:
             logger.error(f'{pname}: error {err}')
 
-
-
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Align thumbnails")
     parser.add_argument("--mode", metavar="mode", type=str, default='downsample')
@@ -309,6 +308,7 @@ if __name__ == '__main__':
     match_dir = os.path.join(thumbnail_dir, 'matches')
     feature_match_dir = os.path.join(thumbnail_dir, 'feature_matches')
     if mode == 'downsample':
+        start_downsample=time.time()
         logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=num_workers>1)
         thumbnail_configs['logger'] = logger_info[0]
         logger= logging.get_logger(logger_info[0])
@@ -373,9 +373,11 @@ if __name__ == '__main__':
                                  img_dir=img_dir, **thumbnail_configs)
         generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=None, scale=mask_scale,
                                  img_dir=img_dir, **thumbnail_configs)
+        time_region.track_time('thumbnail_main.downsample', time.time() - start_downsample)
         logger.info('finished thumbnail downsample.')
         logging.terminate_logger(*logger_info)
     elif mode == 'alignment':
+        start_alignment = time.time()
         os.makedirs(match_dir, exist_ok=True)
         os.makedirs(manual_dir, exist_ok=True)
         compare_distance = thumbnail_configs.pop('compare_distance', 1)
@@ -423,5 +425,8 @@ if __name__ == '__main__':
                     jobs.append(job)
                 for job in jobs:
                     job.result()
+        time_region.track_time('thumbnail_main.alignment', time.time() - start_alignment)
         logger.info('finished thumbnail alignment.')
         logging.terminate_logger(*logger_info)
+    time_region.log_summary()
+

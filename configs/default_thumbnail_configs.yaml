@@ -1,16 +1,15 @@
 thumbnail_mip_level: 6      # mip-level at which to generate thumbnails
 
 downsample:
-    num_workers: 10
+    num_workers: 30
     parallel_within_section: true   # whether to parallel among tiles within a section, or among sections
     # max_mip: 5
     format: jpg
     thumbnail_highpass: true    # whether to use high-pass filter to enhance contrast when generating thumbnail.
     highpass_inter_mip_lvl: 4
 
-
 alignment:
-    num_workers: 5
+    num_workers: 30
     compare_distance: 2
     cache_size: 3
     save_feature_match: false

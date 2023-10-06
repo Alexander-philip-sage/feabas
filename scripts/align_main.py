@@ -8,7 +8,7 @@ import math
 import os
 import time
 import gc
-
+from feabas.time_region import time_region
 from feabas import config, logging
 import feabas.constant as const
 
@@ -69,6 +69,7 @@ def generate_mesh_from_mask(mask_names, outname, **kwargs):
 
 
 def generate_mesh_main():
+    start_generate_mesh_main=time.time()
     logger_info = logging.initialize_main_logger(logger_name='mesh_generation', mp=num_workers>1)
     mesh_config['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
@@ -110,6 +111,7 @@ def generate_mesh_main():
                     jobs.append(job)
             for job in jobs:
                 job.result()
+    time_region.track_time('align_main.generate_mesh_main', time.time() - start_generate_mesh_main)                
     logger.info('meshes generated.')
     logging.terminate_logger(*logger_info)
 
@@ -158,6 +160,7 @@ def match_main(match_list):
 
 
 def optimize_main(section_list):
+    start_optimize_main=time.time() 
     from feabas.aligner import Stack
     stack_config = align_config.get('stack_config', {}).copy()
     slide_window = align_config.get('slide_window', {}).copy()
@@ -186,6 +189,7 @@ def optimize_main(section_list):
         for key in mnames:
             val = cost[key]
             f.write(f'{key}, {val[0]}, {val[1]}\n')
+    time_region.track_time('align_main.optimize_main', time.time() - start_optimize_main)
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
@@ -419,6 +423,7 @@ if __name__ == '__main__':
     if mode == 'meshing':
         generate_mesh_main()
     elif mode == 'matching':
+        start_matching =time.time()
         os.makedirs(match_dir, exist_ok=True)
         generate_mesh_main()
         match_list = sorted(glob.glob(os.path.join(thumb_match_dir, '*.h5')))
@@ -428,10 +433,12 @@ if __name__ == '__main__':
             match_list = match_list[::-1]
         align_config.setdefault('match_name_delimiter',  match_name_delimiter)
         match_main(match_list)
+        time_region.track_time('align_main.matching', time.time() - start_matching)
     elif mode == 'optimization':
         os.makedirs(tform_dir, exist_ok=True)
         optimize_main(None)
     elif mode == 'rendering':
+        start_rendering =time.time() 
         if align_config.pop('offset_bbox', True):
             offset_name = os.path.join(tform_dir, 'offset.txt')
             if not os.path.isfile(offset_name):
@@ -451,14 +458,18 @@ if __name__ == '__main__':
             z_prefix.update({os.path.basename(s): str(k).rjust(digit_num, '0')+'_'
                              for k, s in zip(z_indx, seclist)})
         render_main(tform_list, z_prefix)
+        time_region.track_time('align_main.rendering', time.time() - start_rendering)
     elif mode == 'downsample':
+        start_downsample = time.time()
         max_mip = align_config.pop('max_mip', 8)
         meta_list = sorted(glob.glob(os.path.join(render_dir, 'mip'+str(min_mip), '**', 'metadata.txt'), recursive=True))
         meta_list = meta_list[indx]
         if args.reverse:
             meta_list = meta_list[::-1]
         generate_aligned_mipmaps(render_dir, max_mip=max_mip, meta_list=meta_list, min_mip=min_mip, **align_config)
+        time_region.track_time('align_main.downsample', time.time() - start_downsample)
     elif mode == 'tensorstore_rendering':
+        start_tensorstore_rendering=time.time()
         logger_info = logging.initialize_main_logger(logger_name='tensorstore_render', mp=num_workers>1)
         logger = logging.get_logger(logger_info[0])
         mip_level = align_config.pop('mip_level', 0)
@@ -479,5 +490,7 @@ if __name__ == '__main__':
                                       z_indx = z_indx, resolution=resolution,
                                       flag_dir = ts_flag_dir, **align_config)
         vol_renderer.render_volume(skip_indx=indx, logger=logger_info[0], **align_config)
-        logger.info('finished')
+        time_region.track_time('align_main.tensorstore_rendering', time.time() - start_tensorstore_rendering)
+        logger.info('finished tensorstore_rendering')
         logging.terminate_logger(*logger_info)
+    time_region.log_summary()   

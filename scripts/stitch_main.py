@@ -11,7 +11,7 @@ import tensorstore as ts
 
 import feabas
 from feabas import config, logging, dal
-
+from feabas.time_region import time_region
 
 def match_one_section(coordname, outname, **kwargs):
     logger_info = kwargs.get('logger', None)
@@ -28,6 +28,7 @@ def match_one_section(coordname, outname, **kwargs):
 
 
 def match_main(coord_list, out_dir, **kwargs):
+    start_match_main = time.time()
     num_workers = kwargs.get('num_workers', 1)
     logger_info = logging.initialize_main_logger(logger_name='stitch_matching', mp=num_workers>1)
     kwargs['logger'] = logger_info[0]
@@ -42,6 +43,7 @@ def match_main(coord_list, out_dir, **kwargs):
         flag = match_one_section(coordname, outname, **kwargs)
         if flag == 1:
             logger.info(f'ending for {fname}: {(time.time()-t0)/60} min')
+    time_region.track_time("stitch_main.match_main", time.time() - start_match_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
@@ -115,6 +117,7 @@ def optimize_one_section(matchname, outname, **kwargs):
 
 
 def optmization_main(match_list, out_dir, **kwargs):
+    start_optmization_main = time.time()
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = logging.initialize_main_logger(logger_name='stitch_optmization', mp=num_workers>1)
     kwargs['logger'] = logger_info[0]
@@ -137,6 +140,7 @@ def optmization_main(match_list, out_dir, **kwargs):
                 jobs.append(job)
             for job in jobs:
                 job.result()
+    time_region.track_time("stitch_main.optimization_main", time.time() - start_optmization_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
@@ -214,6 +218,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
 
 
 def render_main(tform_list, out_dir, **kwargs):
+    start_render_main = time.time()
     logger_info = logging.initialize_main_logger(logger_name='stitch_rendering', mp=False)
     logger = logger_info[0]
     driver = kwargs.get('driver', 'image')
@@ -242,8 +247,10 @@ def render_main(tform_list, out_dir, **kwargs):
             logger.info(f'{sec_name}: {num_rendered} tiles | {(time.time()-t0)/60} min')
         except Exception as err:
             logger.error(f'{sec_name}: {err}')
+    time_region.track_time('stitch_main.render_main', time.time() - start_render_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
+
 
 
 def parse_args(args=None):
@@ -326,3 +333,4 @@ if __name__ == '__main__':
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
         match_main(coord_list, match_dir, **stitch_configs)
+    time_region.log_summary()
