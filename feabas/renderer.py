@@ -16,7 +16,7 @@ import feabas.constant as const
 from feabas.mesh import Mesh
 from feabas import common, spatial, dal, logging
 from feabas.config import DEFAULT_RESOLUTION, general_settings
-
+from feabas.time_region import time_region
 
 class MeshRenderer:
     """
@@ -470,46 +470,11 @@ class MeshRenderer:
                 self._default_fillval = 0
         return self._default_fillval
 
-def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
-    driver = kwargs.get('driver', 'image')
-    num_workers = kwargs.pop('num_workers', 1)
-    max_tile_per_job = kwargs.pop('max_tile_per_job', None)
-    canvas_bbox = kwargs.pop('canvas_bbox', None)
-    tile_size = kwargs.pop('tile_size', (4096, 4096))
-    pattern = kwargs.pop('pattern', 'tr{ROW_IND}_tc{COL_IND}.png')
-    scale = kwargs.pop('scale', 1)
-    one_based = kwargs.pop('one_based', False)
-    if 'weight_params' in kwargs and isinstance(kwargs['weight_params'], str):
-        kwargs['weight_params'] = const.TRIFINDER_MODE_LIST.index(kwargs['weight_params'])
-    keywords = ['{ROW_IND}', '{COL_IND}', '{X_MIN}', '{Y_MIN}', '{X_MAX}', '{Y_MAX}']
-    resolution = image_loader.resolution
-    mesh.change_resolution(resolution / scale)
-    kwargs.setdefault('target_resolution', resolution / scale)
-    tileht, tilewd = tile_size
-    if canvas_bbox is None:
-        gx_min, gy_min, gx_max, gy_max = mesh.bbox(gear=const.MESH_GEAR_MOVING)
-        x0, y0 = 0, 0
-    else:
-        gx_min, gy_min, gx_max, gy_max = canvas_bbox
-        x0, y0 = gx_min, gy_min
-        gx_max = gx_max - gx_min
-        gy_max = gy_max - gy_min
-        gx_min, gy_min = 0, 0
-    if driver != 'image':
-        gx_max, gy_max = int(np.ceil(gx_max)), int(np.ceil(gy_max))
-        gx_min, gy_min = int(np.floor(gx_min)), int(np.floor(gy_min))
-        while tile_ht > gy_max or tile_wd > gx_max:
-            tile_ht = tile_ht // 2
-            tile_wd = tile_wd // 2
-    tx_max = int(np.ceil(gx_max  / tilewd))
-    ty_max = int(np.ceil(gy_max  / tileht))
-    tx_min = int(np.floor(gx_min  / tilewd))
-    ty_min = int(np.floor(gy_min  / tileht))
-    cols, rows = np.meshgrid(np.arange(tx_min, tx_max), np.arange(ty_min, ty_max))
-    cols, rows = cols.ravel(), rows.ravel()
-    idxz = common.z_order(np.stack((rows, cols), axis=-1))
-    cols, rows = cols[idxz], rows[idxz]
-    bboxes = []
+def generate_bboxes_outfnames(prefix, image_loader, bboxes, driver, rows, cols, tilewd, 
+                              tileht, x0, y0, one_based, keywords, pattern, mesh,
+                              tile_wd, tile_ht, gx_max, gy_max, **kwargs):
+    '''for image outputs, returns bboxes and filenames
+    for other, returns bboxes and bbox_out'''
     region = mesh.shapely_regions(gear=const.MESH_GEAR_MOVING, offsetting=True)
     if driver == 'image':
         filenames = []
@@ -519,12 +484,12 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 continue
             bboxes.append(bbox)
             xmin, ymin, xmax, ymax = bbox
-            keyword_replaces = [str(r+one_based), str(c+one_based), str(xmin), str(ymin), str(xmax), str(ymax)]
+            keyword_replaces = [str(r+one_based).zfill(2), str(c+one_based).zfill(2), str(xmin), str(ymin), str(xmax), str(ymax)]
             fname = pattern
             for kw, kwr in zip(keywords, keyword_replaces):
                 fname = fname.replace(kw, kwr)
             filenames.append(prefix + fname)
-        rendered = {}
+        return filenames, bboxes
     else:
         bboxes_out = []
         if not prefix.endswith('/'):
@@ -535,6 +500,7 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 break
         else:
             prefix = 'file://' + prefix
+            
         number_of_channels = image_loader.number_of_channels
         dtype = kwargs.get('dtype_out', image_loader.dtype)
         fillval = kwargs.get('fillval', image_loader.default_fillval)
@@ -605,7 +571,8 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 "create": True,
                 "delete_existing": False
             }
-        else:
+            
+        else:  
             raise ValueError(f'{driver} not supported')
         for r, c in zip(rows, cols):
             bbox = (c*tilewd + x0, r*tileht + y0, (c+1)*tilewd + x0, (r+1)*tileht + y0)
@@ -614,6 +581,59 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 continue
             bboxes.append(bbox)
             bboxes_out.append(bbox_out)
+
+        return bboxes_out, bboxes, ts_specs
+
+def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
+    start_render_whole_mesh = time.time()
+    driver = kwargs.get('driver', 'image')
+    num_workers = kwargs.pop('num_workers', 1)
+    max_tile_per_job = kwargs.pop('max_tile_per_job', None)
+    canvas_bbox = kwargs.pop('canvas_bbox', None)
+    tile_size = kwargs.pop('tile_size', (4096, 4096))
+    pattern = kwargs.pop('pattern', 'tr{ROW_IND}_tc{COL_IND}.png')
+    scale = kwargs.pop('scale', 1)
+    one_based = kwargs.pop('one_based', False)
+    if 'weight_params' in kwargs and isinstance(kwargs['weight_params'], str):
+        kwargs['weight_params'] = const.TRIFINDER_MODE_LIST.index(kwargs['weight_params'])
+    keywords = ['{ROW_IND}', '{COL_IND}', '{X_MIN}', '{Y_MIN}', '{X_MAX}', '{Y_MAX}']
+    resolution = image_loader.resolution
+    mesh.change_resolution(resolution / scale)
+    kwargs.setdefault('target_resolution', resolution / scale)
+    tileht, tilewd = tile_size
+    if canvas_bbox is None:
+        gx_min, gy_min, gx_max, gy_max = mesh.bbox(gear=const.MESH_GEAR_MOVING)
+        x0, y0 = 0, 0
+    else:
+        gx_min, gy_min, gx_max, gy_max = canvas_bbox
+        x0, y0 = gx_min, gy_min
+        gx_max = gx_max - gx_min
+        gy_max = gy_max - gy_min
+        gx_min, gy_min = 0, 0
+    if driver != 'image':
+        gx_max, gy_max = int(np.ceil(gx_max)), int(np.ceil(gy_max))
+        gx_min, gy_min = int(np.floor(gx_min)), int(np.floor(gy_min))
+        while tile_ht > gy_max or tile_wd > gx_max:
+            tile_ht = tile_ht // 2
+            tile_wd = tile_wd // 2
+    tx_max = int(np.ceil(gx_max  / tilewd))
+    ty_max = int(np.ceil(gy_max  / tileht))
+    tx_min = int(np.floor(gx_min  / tilewd))
+    ty_min = int(np.floor(gy_min  / tileht))
+    cols, rows = np.meshgrid(np.arange(tx_min, tx_max), np.arange(ty_min, ty_max))
+    cols, rows = cols.ravel(), rows.ravel()
+    idxz = common.z_order(np.stack((rows, cols), axis=-1))
+    cols, rows = cols[idxz], rows[idxz]
+    bboxes = []
+    if driver == 'image':
+        filenames, bboxes = generate_bboxes_outfnames(prefix, image_loader, bboxes, driver, rows, cols, tilewd, 
+                              tileht, x0, y0, one_based, keywords, pattern, mesh, None, None, 
+                              gx_max, gy_max, **kwargs)
+        rendered = {}
+    else:
+        bboxes_out, bboxes, ts_specs = generate_bboxes_outfnames(prefix, image_loader, bboxes, driver, rows, cols, tilewd, 
+                              tileht, x0, y0, one_based, keywords, pattern, mesh, tile_wd, tile_ht, 
+                              gx_max, gy_max,  **kwargs)
         rendered  = []
     num_tiles = len(bboxes)
     if num_tiles == 0:
@@ -646,13 +666,14 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 bboxes_out_list.append(bboxes_out[idx0:idx1])
         submeshes = mesh.submeshes_from_bboxes(bbox_unions, save_material=True)
         jobs = []
+        print(f"running render_whole_mesh with {num_workers} workers")
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
             if driver == 'image':
                 for msh, bbox, fnames in zip(submeshes, bboxes_list, filenames_list):
                     if msh is None:
                         continue
                     msh_dict = msh.get_init_dict(save_material=True, vertex_flags=(const.MESH_GEAR_INITIAL, const.MESH_GEAR_MOVING))
-                    job = executor.submit(target_func, msh_dict, bbox, fnames)
+                    job = executor.submit(target_func, msh_dict, bbox, outnames=fnames) 
                     jobs.append(job)
             else:
                 for msh, bbox, bbox_out in zip(submeshes, bboxes_list, bboxes_out_list):
@@ -667,6 +688,7 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
             rendered = target_func(mesh, bboxes, filenames)
         else:
             rendered = target_func(mesh, bboxes, bboxes_out=bboxes_out)
+    time_region.track_time("renderer.render_whole_mesh", time.time() - start_render_whole_mesh)
     return rendered
 
 

@@ -538,7 +538,7 @@ def align_two_thumbnails(img0, img1, outname, mask0=None, mask1=None, **kwargs):
         mtch0 = match_two_thumbnails_LRadon(img0, img1, mask0=mask0, mask1=mask1,
                                             **feature_match_settings)
         if mtch0 is None:     
-            logger.warning(f'{bname}: fail to find matches.')
+            logger.warning(f'{bname}: LRadon fail to find matches.')
             return 0
         if save_feature_match:
             xy0, xy1, weight = mtch0
@@ -553,7 +553,7 @@ def align_two_thumbnails(img0, img1, outname, mask0=None, mask1=None, **kwargs):
     mtch1 = match_two_thumbnails_pmcc(img0, img1, mask0=mask0, mask1=mask1,
                                       initial_matches=mtch0, **block_match_settings)
     if mtch1 is None:
-        logger.warning(f'{bname}: fail to find matches.')
+        logger.warning(f'{bname}: pmcc fail to find matches.')
         return 0
     else:
         xy0, xy1, weight = mtch1

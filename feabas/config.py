@@ -100,7 +100,7 @@ def thumbnail_config_file():
     config_file = os.path.join(work_dir, 'configs', 'thumbnail_configs.yaml')
     if not os.path.isfile(config_file):
         config_file = os.path.join(_default_configuration_folder, 'default_thumbnail_configs.yaml')
-        assert(os.path.isfile(config_file))
+        assert(os.path.isfile(config_file)), f"failed to find thumbnail config file at {config_file}"
     return config_file
 
 
