@@ -12,6 +12,8 @@ import tensorstore as ts
 import feabas
 from feabas import config, logging, dal
 from feabas.time_region import time_region
+from feabas.stitcher import Stitcher, MontageRenderer
+import numpy as np
 
 def match_one_section(coordname, outname, **kwargs):
     logger_info = kwargs.get('logger', None)
@@ -312,9 +314,7 @@ def parse_args(args=None):
     parser.add_argument("--reverse",  action='store_true')
     return parser.parse_args(args)
 
-
-if __name__ == '__main__':
-    args = parse_args()
+def setup_globals(args):
     if not args.work_dir:
         root_dir = config.get_work_dir()
         generate_settings = config.general_settings()
@@ -347,14 +347,18 @@ if __name__ == '__main__':
     nthreads = max(1, math.floor(num_cpus / num_workers))
     config.limit_numpy_thread(nthreads)
 
-    from feabas.stitcher import Stitcher, MontageRenderer
-    import numpy as np
-
     stitch_dir = os.path.join(root_dir, 'stitch')
     coord_dir = os.path.join(stitch_dir, 'stitch_coord')
     match_dir = os.path.join(stitch_dir, 'match_h5')
     mesh_dir = os.path.join(stitch_dir, 'tform')
     render_meta_dir = os.path.join(stitch_dir, 'ts_specs')
+    return (root_dir, generate_settings, stitch_configs, num_cpus, mode, num_workers, nthreads, 
+            stitch_dir, coord_dir, mesh_dir, match_dir, render_meta_dir
+            )
+
+if __name__ == '__main__':
+    args = parse_args()
+    root_dir, generate_settings, stitch_configs, num_cpus, mode, num_workers, nthreads, stitch_dir, coord_dir, mesh_dir, match_dir, render_meta_dir=setup_globals(args)
     stt_idx, stp_idx, step = args.start, args.stop, args.step
     if stp_idx == 0:
         stp_idx = None
