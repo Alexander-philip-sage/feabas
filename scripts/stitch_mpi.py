@@ -32,7 +32,8 @@ if __name__=='__main__':
             indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
         else:
             indx = slice(RANK*sections_per_rank, len(coord_list), 1)
-        coord_list = coord_list[indx]    
+        print(RANK,"looking at indx", indx)
+        coord_list = coord_list[indx]
         if args.reverse:
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
