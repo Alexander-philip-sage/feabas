@@ -325,9 +325,6 @@ def setup_globals(args):
         generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
         stitch_configs = config.stitch_configs(root_dir)
     num_cpus = generate_settings['cpu_budget']
-    print("root_dir", root_dir)
-    print("generate_settings", generate_settings)
-    print("stitch_configs", stitch_configs)
     if args.mode.lower().startswith('r'):
         mode = 'rendering'
     elif args.mode.lower().startswith('o'):

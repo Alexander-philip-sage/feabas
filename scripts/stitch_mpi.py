@@ -11,7 +11,7 @@ import tensorstore as ts
 
 import feabas
 from feabas import config, logging, dal
-from stitch_main import parse_args, match_main
+from stitch_main import parse_args, match_main, setup_globals
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
 RANK = comm.Get_rank()
@@ -32,6 +32,8 @@ if __name__=='__main__':
             indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
         else:
             indx = slice(RANK*sections_per_rank, len(coord_list), 1)
+        print(RANK,"looking at indx", indx)
+        coord_list = coord_list[indx]
         if args.reverse:
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
