@@ -13,8 +13,8 @@ else:
 
 
 @lru_cache(maxsize=1)
-def general_settings():
-    config_file = os.path.join(_default_configuration_folder, 'general_configs.yaml')
+def general_settings(config_dir= _default_configuration_folder):
+    config_file = os.path.join(config_dir, 'general_configs.yaml')
     if os.path.isfile(config_file):
         with open(config_file, 'r') as f:
             conf = yaml.safe_load(f)
@@ -47,8 +47,9 @@ def get_log_dir():
 
 
 @lru_cache(maxsize=1)
-def stitch_config_file():
-    work_dir = get_work_dir()
+def stitch_config_file(work_dir=None):
+    if work_dir is None:
+        work_dir = get_work_dir()
     config_file = os.path.join(work_dir, 'configs', 'stitching_configs.yaml')
     if not os.path.isfile(config_file):
         config_file = os.path.join(_default_configuration_folder, 'default_stitching_configs.yaml')
@@ -57,9 +58,13 @@ def stitch_config_file():
 
 
 @lru_cache(maxsize=1)
-def stitch_configs():
-    with open(stitch_config_file(), 'r') as f:
-        conf = yaml.safe_load(f)
+def stitch_configs(work_dir=None):
+    if work_dir is None:
+        with open(stitch_config_file(), 'r') as f:
+            conf = yaml.safe_load(f)
+    else:
+        with open(stitch_config_file(work_dir), 'r') as f:
+            conf = yaml.safe_load(f)        
     return conf
 
 
@@ -112,14 +117,18 @@ def thumbnail_configs():
 
 
 @lru_cache(maxsize=1)
-def stitch_render_dir():
-    config_file = stitch_config_file()
+def stitch_render_dir(work_dir=None):
+    if work_dir is None:
+        config_file = stitch_config_file()
+    else:
+        config_file = stitch_config_file(work_dir)
     with open(config_file, 'r') as f:        
         stitch_configs = yaml.safe_load(f)
     render_settings = stitch_configs.get('rendering', {})
     outdir = render_settings.get('out_dir', None)
     if outdir is None:
-        work_dir = get_work_dir()
+        if work_dir is None:
+            work_dir = get_work_dir()
         outdir = os.path.join(work_dir, 'stitched_sections')
     return outdir
 

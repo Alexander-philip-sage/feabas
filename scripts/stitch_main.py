@@ -251,44 +251,99 @@ def render_main(tform_list, out_dir, **kwargs):
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
+def look_for_duplicate_sections(coord_list):
+    basenames = [os.path.basename(x) for x in coord_list]
+    section_names = set()
+    for bn in basenames:
+        parts = bn.split('_')
+        assert len(parts)==4, "expected section tilespec file to be of form 'W03_Sec106_R2_montaged.txt'"
+        sn = ''.join(parts[:2])
+        if sn in section_names:
+            raise Exception(f"ERROR: two sections with the same sec name {sn} {bn}\nThis is likely representative of a duplicate section")
 
+def stitch_switchboard(mode):
+    if mode in ['rendering', 'render']:
+        stitch_configs_render = stitch_configs['rendering']
+        stitch_configs_render.pop('out_dir', '')
+        image_outdir = config.stitch_render_dir(root_dir)
+        driver = stitch_configs_render.get('driver', 'image')
+        if driver == 'image':
+            image_outdir = os.path.join(image_outdir, 'mip0')
+        tform_regex = os.path.abspath(os.path.join(mesh_dir, '*.h5'))
+        tform_list = sorted(glob.glob(tform_regex))
+        assert len(tform_list)>0, f"tform list empty, didn't find any h5 files in {tform_regex}"
+        tform_list = tform_list[indx]
+        if args.reverse:
+            tform_list = tform_list[::-1]
+        stitch_configs_render.setdefault('meta_dir', render_meta_dir)
+        print(f"image_outdir {image_outdir}")
+        render_main(tform_list, image_outdir, **stitch_configs_render)
+    elif mode in ['optimization', 'optimize']:
+        stitch_configs_opt = stitch_configs['optimization']
+        match_regex = os.path.abspath(os.path.join(match_dir, '*.h5'))
+        match_list = sorted(glob.glob(match_regex))
+        assert len(match_list) > 0, f"match list couldn't find any h5 files {match_regex}"
+        match_list = match_list[indx]
+        if args.reverse:
+            match_list = match_list[::-1]
+        os.makedirs(mesh_dir, exist_ok=True)
+        optmization_main(match_list, mesh_dir, **stitch_configs_opt)
+    elif mode in ['matching', 'match']:
+        stitch_configs_match = stitch_configs['matching']
+        coord_regex = os.path.abspath(os.path.join(coord_dir, '*.txt'))
+        coord_list = sorted(glob.glob(coord_regex))
+        assert len(coord_list) > 0, f"didn't find any txt coord files {coord_regex}"
+        look_for_duplicate_sections(coord_list)
+        coord_list = coord_list[indx]
+        if args.reverse:
+            coord_list = coord_list[::-1]
+        os.makedirs(match_dir, exist_ok=True)
+        match_main(coord_list, match_dir, **stitch_configs_match)    
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Run stitching")
     parser.add_argument("--mode", metavar="mode", type=str, default='matching')
+    parser.add_argument("--work_dir", metavar="work_dir", type=str, default=None)
+    #parser.add_argument("--section_name", metavar="section_name", type=str, default=None)
     parser.add_argument("--start", metavar="start", type=int, default=0)
     parser.add_argument("--step", metavar="step", type=int, default=1)
-    parser.add_argument("--stop", metavar="stop", type=int, default=0)
+    parser.add_argument("--stop", metavar="stop", type=int, default=0, 
+                        help="stop index is exclusive. stop of one batch should be the same as the start of the next")
     parser.add_argument("--reverse",  action='store_true')
     return parser.parse_args(args)
 
 
 if __name__ == '__main__':
     args = parse_args()
-
-    root_dir = config.get_work_dir()
-    generate_settings = config.general_settings()
+    if not args.work_dir:
+        root_dir = config.get_work_dir()
+        generate_settings = config.general_settings()
+        stitch_configs = config.stitch_configs()
+    else:
+        root_dir = args.work_dir
+        config._default_configuration_folder = args.work_dir
+        generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
+        stitch_configs = config.stitch_configs(root_dir)
     num_cpus = generate_settings['cpu_budget']
-
-    stitch_configs = config.stitch_configs()
+    print("root_dir", root_dir)
+    print("generate_settings", generate_settings)
+    print("stitch_configs", stitch_configs)
     if args.mode.lower().startswith('r'):
-        stitch_configs = stitch_configs['rendering']
-        stitch_configs.pop('out_dir', '')
         mode = 'rendering'
-        image_outdir = config.stitch_render_dir()
-        driver = stitch_configs.get('driver', 'image')
-        if driver == 'image':
-            image_outdir = os.path.join(image_outdir, 'mip0')
     elif args.mode.lower().startswith('o'):
-        stitch_configs = stitch_configs['optimization']
         mode = 'optimization'
     else:
-        stitch_configs = stitch_configs['matching']
         mode = 'matching'
-    num_workers = stitch_configs.get('num_workers', 1)
-    if num_workers > num_cpus:
-        num_workers = num_cpus
-        stitch_configs['num_workers'] = num_workers
+    if mode=='all':
+        num_workers = stitch_configs.get('num_workers', 1)
+        if num_workers > num_cpus:
+            num_workers = num_cpus
+            stitch_configs['num_workers'] = num_workers
+    else:
+        num_workers = stitch_configs[mode].get('num_workers', 1)
+        if num_workers > num_cpus:
+            num_workers = num_cpus
+            stitch_configs[mode]['num_workers'] = num_workers
     nthreads = max(1, math.floor(num_cpus / num_workers))
     config.limit_numpy_thread(nthreads)
 
@@ -304,33 +359,11 @@ if __name__ == '__main__':
     if stp_idx == 0:
         stp_idx = None
     indx = slice(stt_idx, stp_idx, step)
-
-    if mode == 'rendering':
-        tform_regex = os.path.abspath(os.path.join(mesh_dir, '*.h5'))
-        tform_list = sorted(glob.glob(tform_regex))
-        assert len(tform_list)>0, f"tform list empty, didn't find any h5 files in {tform_regex}"
-        tform_list = tform_list[indx]
-        if args.reverse:
-            tform_list = tform_list[::-1]
-        stitch_configs.setdefault('meta_dir', render_meta_dir)
-        print(f"image_outdir {image_outdir}")
-        render_main(tform_list, image_outdir, **stitch_configs)
-    elif mode == 'optimization':
-        match_regex = os.path.abspath(os.path.join(match_dir, '*.h5'))
-        match_list = sorted(glob.glob(match_regex))
-        assert len(match_list) > 0, f"match list couldn't find any h5 files {match_regex}"
-        match_list = match_list[indx]
-        if args.reverse:
-            match_list = match_list[::-1]
-        os.makedirs(mesh_dir, exist_ok=True)
-        optmization_main(match_list, mesh_dir, **stitch_configs)
+    if mode =='all':
+        stitch_switchboard('matching')
+        stitch_switchboard('optimization')
+        stitch_switchboard('rendering')
     else:
-        coord_regex = os.path.abspath(os.path.join(coord_dir, '*.txt'))
-        coord_list = sorted(glob.glob(coord_regex))
-        assert len(coord_list) > 0, f"didn't find any txt coord files {coord_regex}"
-        coord_list = coord_list[indx]
-        if args.reverse:
-            coord_list = coord_list[::-1]
-        os.makedirs(match_dir, exist_ok=True)
-        match_main(coord_list, match_dir, **stitch_configs)
+        stitch_switchboard(mode)
+
     time_region.log_summary()

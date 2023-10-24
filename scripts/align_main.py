@@ -53,7 +53,7 @@ def generate_mesh_from_mask(mask_names, outname, **kwargs):
         break
     secname = os.path.splitext(os.path.basename(outname))[0]
     if loader is None:
-        logger.warning(f'{secname}: mask does not exist.')
+        logger.warning(str(secname) + " mask does not exist")
         return
     mesh_size = mesh_size * config.DEFAULT_RESOLUTION / src_resolution
     G = spatial.Geometry.from_image_mosaic(loader, material_table=material_table, resolution=src_resolution)
@@ -168,6 +168,7 @@ def optimize_main(section_list):
     stack_config.setdefault('section_order_file', os.path.join(root_dir, 'section_order.txt'))
     slide_window['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
+    print("optimize_main: section_list", section_list)
     stk = Stack(section_list=section_list, mesh_dir=mesh_dir, match_dir=match_dir, mesh_out_dir=tform_dir, **stack_config)
     section_list = stk.section_list
     stk.update_lock_flags({s: os.path.isfile(os.path.join(tform_dir, s + '.h5')) for s in section_list})
