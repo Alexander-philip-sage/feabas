@@ -8,18 +8,21 @@ import os
 import time
 from feabas.time_region import time_region
 from feabas import config, logging
+from feabas import mipmap, common, material
+from feabas.mipmap import mip_map_one_section
+import numpy as np
 
-
-def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
+def generate_stitched_mipmaps(img_dir, max_mip,meta_list=None, **kwargs):
     min_mip = kwargs.pop('min_mip', 0)
     num_workers = kwargs.pop('num_workers', 1)
     parallel_within_section = kwargs.pop('parallel_within_section', True)
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
     meta_dir = os.path.join(img_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
-    meta_list = sorted(glob.glob(meta_dir, recursive=True))
-    assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
-    meta_list = meta_list[arg_indx]
+    if not meta_list:
+        meta_list = sorted(glob.glob(meta_dir, recursive=True))
+        assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
+        meta_list = meta_list[arg_indx]
     secnames = [os.path.basename(os.path.dirname(s)) for s in meta_list]
     if parallel_within_section or (num_workers == 1):
         for sname in secnames:
@@ -259,10 +262,7 @@ def parse_args(args=None):
     parser.add_argument("--reverse",  action='store_true')
     return parser.parse_args(args)
 
-
-if __name__ == '__main__':
-    args = parse_args()
-
+def setup_globals(args):
     root_dir = config.get_work_dir()
     generate_settings = config.general_settings()
     num_cpus = generate_settings['cpu_budget']
@@ -280,14 +280,157 @@ if __name__ == '__main__':
 
     num_workers = thumbnail_configs.get('num_workers', 1)
     if num_workers > num_cpus:
+        print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
         num_workers = num_cpus
         thumbnail_configs['num_workers'] = num_workers
     nthreads = max(1, math.floor(num_cpus / num_workers))
     config.limit_numpy_thread(nthreads)
 
-    from feabas import mipmap, common, material
-    from feabas.mipmap import mip_map_one_section
-    import numpy as np
+    thumbnail_dir = os.path.join(root_dir, 'thumbnail_align')
+    stitch_tform_dir = os.path.join(root_dir, 'stitch', 'tform')
+    img_dir = os.path.join(thumbnail_dir, 'thumbnails')
+    mat_mask_dir = os.path.join(thumbnail_dir, 'material_masks')
+    reg_mask_dir = os.path.join(thumbnail_dir, 'region_masks')
+    manual_dir = os.path.join(thumbnail_dir, 'manual_matches')
+    match_dir = os.path.join(thumbnail_dir, 'matches')
+    feature_match_dir = os.path.join(thumbnail_dir, 'feature_matches')
+    return (root_dir, generate_settings, num_cpus, thumbnail_configs, 
+            thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, 
+            stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
+            match_dir, feature_match_dir)
+
+def downsample_main(meta_list=None):
+    start_downsample=time.time()
+    logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=num_workers>1)
+    thumbnail_configs['logger'] = logger_info[0]
+    logger= logging.get_logger(logger_info[0])
+    align_mip = config.align_configs()['matching']['working_mip_level']
+    stitch_conf = config.stitch_configs()['rendering']
+    driver = stitch_conf.get('driver', 'image')
+    if driver == 'image':
+        max_mip = thumbnail_configs.pop('max_mip', max(0, thumbnail_mip_lvl-1))
+        max_mip = max(align_mip, max_mip)
+        src_dir0 = config.stitch_render_dir()
+        pattern = stitch_conf['filename_settings']['pattern']
+        one_based = stitch_conf['filename_settings']['one_based']
+        fillval = stitch_conf['loader_settings'].get('fillval', 0)
+        thumbnail_configs.setdefault('pattern', pattern)
+        thumbnail_configs.setdefault('one_based', one_based)
+        thumbnail_configs.setdefault('fillval', fillval)
+        generate_stitched_mipmaps(src_dir0, max_mip,meta_list=meta_list **thumbnail_configs)
+        if thumbnail_configs.get('thumbnail_highpass', True):
+            src_mip = max(0, thumbnail_mip_lvl-2)
+            highpass_inter_mip_lvl = thumbnail_configs.get('highpass_inter_mip_lvl', src_mip)
+            assert highpass_inter_mip_lvl < thumbnail_mip_lvl
+            src_dir = os.path.join(src_dir0, 'mip'+str(highpass_inter_mip_lvl))
+            downsample = 2 ** (thumbnail_mip_lvl - highpass_inter_mip_lvl)
+            if downsample >= 4:
+                highpass = True
+            else:
+                highpass = False
+        else:
+            src_mip = max(0, thumbnail_mip_lvl-1)
+            src_dir = os.path.join(src_dir0, 'mip'+str(src_mip))
+            downsample = 2 ** (thumbnail_mip_lvl - src_mip)
+            highpass = False
+        thumbnail_configs.setdefault('downsample', downsample)
+        thumbnail_configs.setdefault('highpass', highpass)
+        slist = generate_thumbnails(src_dir, img_dir, **thumbnail_configs)
+    else:
+        stitch_dir = os.path.join(root_dir, 'stitch')
+        src_dir = os.path.join(stitch_dir, 'ts_specs')
+        tgt_mips = [align_mip]
+        if thumbnail_configs.get('thumbnail_highpass', True):
+            highpass_inter_mip_lvl = thumbnail_configs.pop('highpass_inter_mip_lvl', max(0, thumbnail_mip_lvl-2))
+            assert highpass_inter_mip_lvl < thumbnail_mip_lvl
+            downsample = 2 ** (thumbnail_mip_lvl - highpass_inter_mip_lvl)
+            if downsample >= 4:
+                highpass = True
+                thumbnail_configs.setdefault('highpass_inter_mip_lvl', highpass_inter_mip_lvl)
+                tgt_mips.append(highpass_inter_mip_lvl)
+            else:
+                highpass = False
+                tgt_mips.append(thumbnail_mip_lvl)
+                downsample = 1
+        else:
+            highpass = False
+            tgt_mips.append(thumbnail_mip_lvl)
+            downsample = 1
+        generate_stitched_mipmaps_tensorstore(src_dir, tgt_mips, **thumbnail_configs)
+        thumbnail_configs.setdefault('highpass', highpass)
+        thumbnail_configs.setdefault('mip', thumbnail_mip_lvl)
+        slist = generate_thumbnails_tensorstore(src_dir, img_dir, **thumbnail_configs)
+    mask_scale = 1 / (2 ** thumbnail_mip_lvl)
+    generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, scale=mask_scale,
+                                img_dir=img_dir, **thumbnail_configs)
+    generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=None, scale=mask_scale,
+                                img_dir=img_dir, **thumbnail_configs)
+    time_region.track_time('thumbnail_main.downsample', time.time() - start_downsample)
+    logger.info('finished thumbnail downsample.')
+    logging.terminate_logger(*logger_info)
+
+def setup_pair_names(img_dir,root_dir,  compare_distance):
+    img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
+    imglist = sorted(glob.glob(img_regex))
+    assert len(imglist)>0, f"couldn't find any png files in {img_regex}"
+    section_order_file = os.path.join(root_dir, 'section_order.txt')
+    imglist = common.rearrange_section_order(imglist, section_order_file)[0]
+    bname_list = [os.path.basename(s) for s in imglist]
+    pairnames = []
+    for stp in range(1, compare_distance+1):
+        for k in range(len(bname_list)-stp):
+            pairnames.append((bname_list[k], bname_list[k+stp]))
+    pairnames.sort()
+    return imglist, bname_list, pairnames
+
+def align_main(pairnames=None):
+    start_alignment = time.time()
+    os.makedirs(match_dir, exist_ok=True)
+    os.makedirs(manual_dir, exist_ok=True)
+    compare_distance = thumbnail_configs.pop('compare_distance', 1)
+    if not pairnames:
+        imglist, bname_list, pairnames = setup_pair_names(img_dir,root_dir,  compare_distance)
+        pairnames = pairnames[arg_indx]
+    logger_info = logging.initialize_main_logger(logger_name='thumbnail_align', mp=num_workers>1)
+    thumbnail_configs['logger'] = logger_info[0]
+    logger= logging.get_logger(logger_info[0])
+    resolution = config.DEFAULT_RESOLUTION * (2 ** thumbnail_mip_lvl)
+    thumbnail_configs.setdefault('resolution', resolution)
+    thumbnail_configs.setdefault('feature_match_dir', feature_match_dir)
+    region_labels = []
+    material_table_file = config.material_table_file()
+    material_table = material.MaterialTable.from_json(material_table_file, stream=False)
+    for _, mat in material_table:
+        if mat.enable_mesh and (mat._stiffness_multiplier > 0.1) and (mat.mask_label is not None):
+            region_labels.append(mat.mask_label)
+    thumbnail_configs.setdefault('region_labels', region_labels)
+    target_func = partial(align_thumbnail_pairs, image_dir=img_dir, out_dir=match_dir,
+                            material_mask_dir=mat_mask_dir, region_mask_dir=reg_mask_dir,
+                            **thumbnail_configs)
+    if (num_workers == 1) or (len(pairnames) <= 1):
+        target_func(pairnames)
+    else:
+        num_workers = min(num_workers, len(pairnames))
+        match_per_job = thumbnail_configs.pop('match_per_job', 15)
+        Njobs = max(num_workers, len(pairnames) // match_per_job)
+        indx_j = np.linspace(0, len(pairnames), num=Njobs+1, endpoint=True)
+        indx_j = np.unique(np.round(indx_j).astype(np.int32))
+        jobs = []
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+            for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
+                prnm = pairnames[idx0:idx1]
+                job = executor.submit(target_func, pairnames=prnm)
+                jobs.append(job)
+            for job in jobs:
+                job.result()
+    time_region.track_time('thumbnail_main.alignment', time.time() - start_alignment)
+    logger.info('finished thumbnail alignment.')
+    logging.terminate_logger(*logger_info)
+
+if __name__ == '__main__':
+    args = parse_args()
+
+    root_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
 
     stt_idx, stp_idx, step = args.start, args.stop, args.step
     if stp_idx == 0:
@@ -299,134 +442,9 @@ if __name__ == '__main__':
     else:
         arg_indx = slice(stt_idx, stp_idx, step)
 
-    thumbnail_dir = os.path.join(root_dir, 'thumbnail_align')
-    stitch_tform_dir = os.path.join(root_dir, 'stitch', 'tform')
-    img_dir = os.path.join(thumbnail_dir, 'thumbnails')
-    mat_mask_dir = os.path.join(thumbnail_dir, 'material_masks')
-    reg_mask_dir = os.path.join(thumbnail_dir, 'region_masks')
-    manual_dir = os.path.join(thumbnail_dir, 'manual_matches')
-    match_dir = os.path.join(thumbnail_dir, 'matches')
-    feature_match_dir = os.path.join(thumbnail_dir, 'feature_matches')
     if mode == 'downsample':
-        start_downsample=time.time()
-        logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=num_workers>1)
-        thumbnail_configs['logger'] = logger_info[0]
-        logger= logging.get_logger(logger_info[0])
-        align_mip = config.align_configs()['matching']['working_mip_level']
-        stitch_conf = config.stitch_configs()['rendering']
-        driver = stitch_conf.get('driver', 'image')
-        if driver == 'image':
-            max_mip = thumbnail_configs.pop('max_mip', max(0, thumbnail_mip_lvl-1))
-            max_mip = max(align_mip, max_mip)
-            src_dir0 = config.stitch_render_dir()
-            pattern = stitch_conf['filename_settings']['pattern']
-            one_based = stitch_conf['filename_settings']['one_based']
-            fillval = stitch_conf['loader_settings'].get('fillval', 0)
-            thumbnail_configs.setdefault('pattern', pattern)
-            thumbnail_configs.setdefault('one_based', one_based)
-            thumbnail_configs.setdefault('fillval', fillval)
-            generate_stitched_mipmaps(src_dir0, max_mip, **thumbnail_configs)
-            if thumbnail_configs.get('thumbnail_highpass', True):
-                src_mip = max(0, thumbnail_mip_lvl-2)
-                highpass_inter_mip_lvl = thumbnail_configs.get('highpass_inter_mip_lvl', src_mip)
-                assert highpass_inter_mip_lvl < thumbnail_mip_lvl
-                src_dir = os.path.join(src_dir0, 'mip'+str(highpass_inter_mip_lvl))
-                downsample = 2 ** (thumbnail_mip_lvl - highpass_inter_mip_lvl)
-                if downsample >= 4:
-                    highpass = True
-                else:
-                    highpass = False
-            else:
-                src_mip = max(0, thumbnail_mip_lvl-1)
-                src_dir = os.path.join(src_dir0, 'mip'+str(src_mip))
-                downsample = 2 ** (thumbnail_mip_lvl - src_mip)
-                highpass = False
-            thumbnail_configs.setdefault('downsample', downsample)
-            thumbnail_configs.setdefault('highpass', highpass)
-            slist = generate_thumbnails(src_dir, img_dir, **thumbnail_configs)
-        else:
-            stitch_dir = os.path.join(root_dir, 'stitch')
-            src_dir = os.path.join(stitch_dir, 'ts_specs')
-            tgt_mips = [align_mip]
-            if thumbnail_configs.get('thumbnail_highpass', True):
-                highpass_inter_mip_lvl = thumbnail_configs.pop('highpass_inter_mip_lvl', max(0, thumbnail_mip_lvl-2))
-                assert highpass_inter_mip_lvl < thumbnail_mip_lvl
-                downsample = 2 ** (thumbnail_mip_lvl - highpass_inter_mip_lvl)
-                if downsample >= 4:
-                    highpass = True
-                    thumbnail_configs.setdefault('highpass_inter_mip_lvl', highpass_inter_mip_lvl)
-                    tgt_mips.append(highpass_inter_mip_lvl)
-                else:
-                    highpass = False
-                    tgt_mips.append(thumbnail_mip_lvl)
-                    downsample = 1
-            else:
-                highpass = False
-                tgt_mips.append(thumbnail_mip_lvl)
-                downsample = 1
-            generate_stitched_mipmaps_tensorstore(src_dir, tgt_mips, **thumbnail_configs)
-            thumbnail_configs.setdefault('highpass', highpass)
-            thumbnail_configs.setdefault('mip', thumbnail_mip_lvl)
-            slist = generate_thumbnails_tensorstore(src_dir, img_dir, **thumbnail_configs)
-        mask_scale = 1 / (2 ** thumbnail_mip_lvl)
-        generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, scale=mask_scale,
-                                 img_dir=img_dir, **thumbnail_configs)
-        generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=None, scale=mask_scale,
-                                 img_dir=img_dir, **thumbnail_configs)
-        time_region.track_time('thumbnail_main.downsample', time.time() - start_downsample)
-        logger.info('finished thumbnail downsample.')
-        logging.terminate_logger(*logger_info)
+        downsample_main()
     elif mode == 'alignment':
-        start_alignment = time.time()
-        os.makedirs(match_dir, exist_ok=True)
-        os.makedirs(manual_dir, exist_ok=True)
-        compare_distance = thumbnail_configs.pop('compare_distance', 1)
-        logger_info = logging.initialize_main_logger(logger_name='thumbnail_align', mp=num_workers>1)
-        thumbnail_configs['logger'] = logger_info[0]
-        logger= logging.get_logger(logger_info[0])
-        resolution = config.DEFAULT_RESOLUTION * (2 ** thumbnail_mip_lvl)
-        thumbnail_configs.setdefault('resolution', resolution)
-        thumbnail_configs.setdefault('feature_match_dir', feature_match_dir)
-        img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
-        imglist = sorted(glob.glob(img_regex))
-        assert len(imglist)>0, f"couldn't find any png files in {img_regex}"
-        section_order_file = os.path.join(root_dir, 'section_order.txt')
-        imglist = common.rearrange_section_order(imglist, section_order_file)[0]
-        bname_list = [os.path.basename(s) for s in imglist]
-        region_labels = []
-        material_table_file = config.material_table_file()
-        material_table = material.MaterialTable.from_json(material_table_file, stream=False)
-        for _, mat in material_table:
-            if mat.enable_mesh and (mat._stiffness_multiplier > 0.1) and (mat.mask_label is not None):
-                region_labels.append(mat.mask_label)
-        thumbnail_configs.setdefault('region_labels', region_labels)
-        pairnames = []
-        for stp in range(1, compare_distance+1):
-            for k in range(len(bname_list)-stp):
-                pairnames.append((bname_list[k], bname_list[k+stp]))
-        pairnames.sort()
-        pairnames = pairnames[arg_indx]
-        target_func = partial(align_thumbnail_pairs, image_dir=img_dir, out_dir=match_dir,
-                              material_mask_dir=mat_mask_dir, region_mask_dir=reg_mask_dir,
-                              **thumbnail_configs)
-        if (num_workers == 1) or (len(pairnames) <= 1):
-            target_func(pairnames)
-        else:
-            num_workers = min(num_workers, len(pairnames))
-            match_per_job = thumbnail_configs.pop('match_per_job', 15)
-            Njobs = max(num_workers, len(pairnames) // match_per_job)
-            indx_j = np.linspace(0, len(pairnames), num=Njobs+1, endpoint=True)
-            indx_j = np.unique(np.round(indx_j).astype(np.int32))
-            jobs = []
-            with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
-                for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
-                    prnm = pairnames[idx0:idx1]
-                    job = executor.submit(target_func, pairnames=prnm)
-                    jobs.append(job)
-                for job in jobs:
-                    job.result()
-        time_region.track_time('thumbnail_main.alignment', time.time() - start_alignment)
-        logger.info('finished thumbnail alignment.')
-        logging.terminate_logger(*logger_info)
+        align_main()
     time_region.log_summary()
 

@@ -334,11 +334,13 @@ def setup_globals(args):
     if mode=='all':
         num_workers = stitch_configs.get('num_workers', 1)
         if num_workers > num_cpus:
+            print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
             num_workers = num_cpus
             stitch_configs['num_workers'] = num_workers
     else:
         num_workers = stitch_configs[mode].get('num_workers', 1)
         if num_workers > num_cpus:
+            print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
             num_workers = num_cpus
             stitch_configs[mode]['num_workers'] = num_workers
     nthreads = max(1, math.floor(num_cpus / num_workers))
