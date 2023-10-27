@@ -7,6 +7,7 @@ import gc
 import h5py
 import matplotlib.tri
 from multiprocessing import get_context
+from multiprocessing import cpu_count as mpcpu_count
 import numpy as np
 import os
 from rtree import index
@@ -276,6 +277,8 @@ class Stitcher:
         """
         overwrite = kwargs.pop('overwrite', False)
         num_workers = kwargs.pop('num_workers', 1)
+        if num_workers==1:
+            print("warning: only running with 1 worker")
         num_overlaps_per_job = kwargs.get('num_overlaps_per_job', 180) # 180 roughly number of overlaps in an MultiSEM mFoV
         loader_config = kwargs.pop('loader_config', {}).copy()
         logger_info = kwargs.get('logger', None)
@@ -309,6 +312,9 @@ class Stitcher:
         jobs = []
         num_new_matches = 0
         err_raised = False
+        #print(f"stitcher.dispatch_matchers num_workers {num_workers}")
+        #print(f"cpus found os.cpu_count {os.cpu_count()}")
+        #print(f"cpus found mp.cpu_count {mpcpu_count()}")
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
             for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
                 ovlp_g = overlaps[idx0:idx1] # global indices of overlaps

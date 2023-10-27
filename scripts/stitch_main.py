@@ -16,25 +16,35 @@ from feabas.stitcher import Stitcher, MontageRenderer
 import numpy as np
 
 def match_one_section(coordname, outname, **kwargs):
+    start_match_one_section=time.time()
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
+    print("MMa")
     stitcher = Stitcher.from_coordinate_file(coordname)
     if os.path.isfile(outname + '_err'):
         logger.info(f'loading previous results for {os.path.basename(coordname)}')
         stitcher.load_matches_from_h5(outname + '_err', check_order=True)
+    print("MMab")
     _, err = stitcher.dispatch_matchers(verbose=False, **kwargs)
+    print("MMb")
     if err:
         outname = outname + '_err'
+    print("MMc")
     stitcher.save_to_h5(outname, save_matches=True, save_meshes=False)
+    time_region.track_time("stitch_main.match_main", time.time() - start_match_one_section)
     return 1
-
 
 def match_main(coord_list, out_dir, **kwargs):
     start_match_main = time.time()
     num_workers = kwargs.get('num_workers', 1)
+    if 'num_workers' in kwargs.keys():
+        print(f"num workers found in match_one_section. num_workers: {kwargs['num_workers']}")
+    else:
+        print(f"num workers not set. setting to {num_workers}")
     logger_info = logging.initialize_main_logger(logger_name='stitch_matching', mp=num_workers>1)
     kwargs['logger'] = logger_info[0]
     logger= logging.get_logger(logger_info[0])
+    print("XX")
     for coordname in coord_list:
         t0 = time.time()
         fname = os.path.basename(coordname).replace('.txt', '')
@@ -42,9 +52,11 @@ def match_main(coord_list, out_dir, **kwargs):
         if os.path.isfile(outname):
             continue
         logger.info(f'starting matching for {fname}')
+        print("XXa", coordname)
         flag = match_one_section(coordname, outname, **kwargs)
         if flag == 1:
             logger.info(f'ending for {fname}: {(time.time()-t0)/60} min')
+    print("YY")
     time_region.track_time("stitch_main.match_main", time.time() - start_match_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
@@ -325,11 +337,13 @@ def setup_globals(args):
         generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
         stitch_configs = config.stitch_configs(root_dir)
     num_cpus = generate_settings['cpu_budget']
-    if args.mode.lower().startswith('r'):
+    if ('match' in args.mode.lower()) and ('optimiz' in args.mode.lower()):
+        mode = "matching_optimize"
+    elif args.mode.lower().startswith('r'):
         mode = 'rendering'
     elif args.mode.lower().startswith('o'):
         mode = 'optimization'
-    else:
+    elif args.mode.lower().startswith('m'):
         mode = 'matching'
     if mode=='all':
         num_workers = stitch_configs.get('num_workers', 1)
@@ -337,6 +351,16 @@ def setup_globals(args):
             print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
             num_workers = num_cpus
             stitch_configs['num_workers'] = num_workers
+            stitch_configs['matching']['num_workers'] = num_workers
+            stitch_configs['optimization']['num_workers'] = num_workers
+            stitch_configs['rendering']['num_workers'] = num_workers
+    elif mode=='matching_optimize':
+        num_workers = stitch_configs['matching'].get('num_workers', 1)
+        if num_workers > num_cpus:
+            print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
+            num_workers = num_cpus
+            stitch_configs['matching']['num_workers'] = num_workers
+        stitch_configs['optimization']['num_workers'] = stitch_configs['matching']['num_workers']
     else:
         num_workers = stitch_configs[mode].get('num_workers', 1)
         if num_workers > num_cpus:

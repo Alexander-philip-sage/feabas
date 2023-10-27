@@ -1,3 +1,14 @@
+#my specific ignores
+py38
+align.e*
+align.o*
+stitch_mpi.e*
+stitch_mpi.o*
+stitch_thumbnailalign.o*
+stitch_thumbnailalign.e*
+runs
+env_polaris.sh
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
