@@ -19,17 +19,13 @@ def match_one_section(coordname, outname, **kwargs):
     start_match_one_section=time.time()
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
-    print("MMa")
     stitcher = Stitcher.from_coordinate_file(coordname)
     if os.path.isfile(outname + '_err'):
         logger.info(f'loading previous results for {os.path.basename(coordname)}')
         stitcher.load_matches_from_h5(outname + '_err', check_order=True)
-    print("MMab")
     _, err = stitcher.dispatch_matchers(verbose=False, **kwargs)
-    print("MMb")
     if err:
         outname = outname + '_err'
-    print("MMc")
     stitcher.save_to_h5(outname, save_matches=True, save_meshes=False)
     time_region.track_time("stitch_main.match_main", time.time() - start_match_one_section)
     return 1
@@ -44,7 +40,6 @@ def match_main(coord_list, out_dir, **kwargs):
     logger_info = logging.initialize_main_logger(logger_name='stitch_matching', mp=num_workers>1)
     kwargs['logger'] = logger_info[0]
     logger= logging.get_logger(logger_info[0])
-    print("XX")
     for coordname in coord_list:
         t0 = time.time()
         fname = os.path.basename(coordname).replace('.txt', '')
@@ -52,11 +47,9 @@ def match_main(coord_list, out_dir, **kwargs):
         if os.path.isfile(outname):
             continue
         logger.info(f'starting matching for {fname}')
-        print("XXa", coordname)
         flag = match_one_section(coordname, outname, **kwargs)
         if flag == 1:
             logger.info(f'ending for {fname}: {(time.time()-t0)/60} min')
-    print("YY")
     time_region.track_time("stitch_main.match_main", time.time() - start_match_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
@@ -160,6 +153,8 @@ def optmization_main(match_list, out_dir, **kwargs):
 
 
 def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
+    print("render_one_section")
+    out_prefix = os.path.abspath(out_prefix)
     num_workers = kwargs.get('num_workers', 1)
     tile_size = kwargs.pop('tile_size', [4096, 4096])
     scale = kwargs.pop('scale', 1.0)
@@ -173,6 +168,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
         loader_settings['cache_size'] = loader_settings['cache_size'] // num_workers
     if meta_name is not None and os.path.isfile(meta_name):
         return None
+    print("MontageRenderer.from_h5")
     renderer = MontageRenderer.from_h5(tform_name, loader_settings=loader_settings)
     if resolution is not None:
         scale = renderer.resolution / resolution
@@ -180,14 +176,17 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
         resolution = renderer.resolution / scale
     render_settings['scale'] = scale
     out_prefix = out_prefix.replace('\\', '/')
-    print(f"out_prefix {out_prefix}")
+    print("renderer.plan_render_series")
     render_series = renderer.plan_render_series(tile_size, prefix=out_prefix,
-        scale=scale, **kwargs)
+                    scale=scale, **kwargs)
     if use_tensorstore:
         # delete existing
         out_spec = render_series[1].copy()
         out_spec.update({'open': False, 'create': True, 'delete_existing': True})
+        print("ts.open(out_spec).result()")
+        print("out_spec",out_spec)
         store = ts.open(out_spec).result()
+        print("finished ts.open")
     if num_workers == 1:
         bboxes, filenames, _ = render_series
         metadata = renderer.render_series_to_file(bboxes, filenames, **render_settings)
@@ -232,6 +231,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
 
 
 def render_main(tform_list, out_dir, **kwargs):
+    print("stitch_main.render_main")
     start_render_main = time.time()
     logger_info = logging.initialize_main_logger(logger_name='stitch_rendering', mp=False)
     logger = logger_info[0]
@@ -253,6 +253,7 @@ def render_main(tform_list, out_dir, **kwargs):
                 continue
             logger.info(f'{sec_name}: start')
             if use_tensorstore:
+                #os.makedirs(sec_outdir, exist_ok=True)
                 out_prefix = sec_outdir
             else:
                 os.makedirs(sec_outdir, exist_ok=True)

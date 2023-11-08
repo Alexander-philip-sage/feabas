@@ -315,7 +315,7 @@ class Stitcher:
         #print(f"stitcher.dispatch_matchers num_workers {num_workers}")
         #print(f"cpus found os.cpu_count {os.cpu_count()}")
         #print(f"cpus found mp.cpu_count {mpcpu_count()}")
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
                 ovlp_g = overlaps[idx0:idx1] # global indices of overlaps
                 mapper, ovlp = np.unique(ovlp_g, return_inverse=True, axis=None)
@@ -1294,6 +1294,7 @@ class MontageRenderer:
                 rendered[filename] = bbox
         else: # use tensorstore
             if not isinstance(filenames, ts.TensorStore):
+                #print("render_series_to_file: type(filenames)",type(filenames))
                 dataset = ts.open(filenames).result()
             else:
                 dataset = filenames
@@ -1596,6 +1597,7 @@ class MontageRenderer:
 
     @staticmethod
     def subprocess_render_montages(montage, bboxes, outnames, **kwargs):
+        #print("subprocess_render_montages")
         selected = kwargs.pop('selected', None)
         if isinstance(montage, str):
             M = MontageRenderer.from_h5(montage, selected=selected, **kwargs)

@@ -11,8 +11,9 @@ from feabas import config, logging
 from feabas import mipmap, common, material
 from feabas.mipmap import mip_map_one_section
 import numpy as np
+from typing import List
 
-def generate_stitched_mipmaps(img_dir, max_mip,meta_list=None, **kwargs):
+def generate_stitched_mipmaps(img_dir, max_mip,meta_list: List[str] =None, **kwargs):
     min_mip = kwargs.pop('min_mip', 0)
     num_workers = kwargs.pop('num_workers', 1)
     parallel_within_section = kwargs.pop('parallel_within_section', True)
@@ -40,15 +41,16 @@ def generate_stitched_mipmaps(img_dir, max_mip,meta_list=None, **kwargs):
     logger.info('mipmapping generated.')
 
 
-def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, **kwargs):
+def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[str]=None, **kwargs):
     num_workers = kwargs.pop('num_workers', 1)
     parallel_within_section = kwargs.pop('parallel_within_section', True)
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
-    meta_regex = os.path.join(meta_dir,'*.json')
-    meta_list = sorted(glob.glob(meta_regex))
-    assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
-    meta_list = meta_list[arg_indx]
+    if not meta_list:
+        meta_regex = os.path.join(meta_dir,'*.json')
+        meta_list = sorted(glob.glob(meta_regex))
+        assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
+        meta_list = meta_list[arg_indx]
     if parallel_within_section or num_workers == 1:
         for metafile in meta_list:
             mipmap.generate_tensorstore_scales(metafile, tgt_mips, num_workers=num_workers, **kwargs)
@@ -102,12 +104,13 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
     return updated
 
 
-def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
+def generate_thumbnails_tensorstore(src_dir, out_dir, meta_list: List[str]=None, **kwargs):
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = kwargs.pop('logger', None)
     logger = logging.get_logger(logger_info)
-    meta_list = sorted(glob.glob(os.path.join(src_dir, '*.json')))
-    meta_list = meta_list[arg_indx]
+    if not meta_list:
+        meta_list = sorted(glob.glob(os.path.join(src_dir, '*.json')))
+        meta_list = meta_list[arg_indx]
     target_func = partial(mipmap.create_thumbnail_tensorstore, **kwargs)
     os.makedirs(out_dir, exist_ok=True)
     updated = []
@@ -317,7 +320,7 @@ def downsample_main(meta_list=None):
         thumbnail_configs.setdefault('pattern', pattern)
         thumbnail_configs.setdefault('one_based', one_based)
         thumbnail_configs.setdefault('fillval', fillval)
-        generate_stitched_mipmaps(src_dir0, max_mip,meta_list=meta_list **thumbnail_configs)
+        generate_stitched_mipmaps(src_dir0, max_mip,meta_list=meta_list, **thumbnail_configs)
         if thumbnail_configs.get('thumbnail_highpass', True):
             src_mip = max(0, thumbnail_mip_lvl-2)
             highpass_inter_mip_lvl = thumbnail_configs.get('highpass_inter_mip_lvl', src_mip)
@@ -336,9 +339,9 @@ def downsample_main(meta_list=None):
         thumbnail_configs.setdefault('downsample', downsample)
         thumbnail_configs.setdefault('highpass', highpass)
         slist = generate_thumbnails(src_dir, img_dir, **thumbnail_configs)
-    else:
+    elif driver =='neuroglancer_precomputed':
         stitch_dir = os.path.join(root_dir, 'stitch')
-        src_dir = os.path.join(stitch_dir, 'ts_specs')
+        meta_dir = os.path.join(stitch_dir, 'ts_specs')
         tgt_mips = [align_mip]
         if thumbnail_configs.get('thumbnail_highpass', True):
             highpass_inter_mip_lvl = thumbnail_configs.pop('highpass_inter_mip_lvl', max(0, thumbnail_mip_lvl-2))
@@ -356,10 +359,12 @@ def downsample_main(meta_list=None):
             highpass = False
             tgt_mips.append(thumbnail_mip_lvl)
             downsample = 1
-        generate_stitched_mipmaps_tensorstore(src_dir, tgt_mips, **thumbnail_configs)
+        generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips,meta_list=meta_list, **thumbnail_configs)
         thumbnail_configs.setdefault('highpass', highpass)
         thumbnail_configs.setdefault('mip', thumbnail_mip_lvl)
-        slist = generate_thumbnails_tensorstore(src_dir, img_dir, **thumbnail_configs)
+        slist = generate_thumbnails_tensorstore(meta_dir, img_dir,meta_list=meta_list, **thumbnail_configs)
+    else:
+        raise NotImplementedError("saving with other file types not tested")
     mask_scale = 1 / (2 ** thumbnail_mip_lvl)
     generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, scale=mask_scale,
                                 img_dir=img_dir, **thumbnail_configs)

@@ -7,6 +7,11 @@ stitch_mpi.o*
 stitch_thumbnailalign.o*
 stitch_thumbnailalign.e*
 runs
+thumb_precomputed.*
+work_dir_W01
+work_dir4
+work_dir69
+work_dir_all
 env_polaris.sh
 
 # Byte-compiled / optimized / DLL files
