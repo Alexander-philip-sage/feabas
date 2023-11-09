@@ -155,6 +155,7 @@ def optmization_main(match_list, out_dir, **kwargs):
 def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
     print("render_one_section")
     out_prefix = os.path.abspath(out_prefix)
+    print(out_prefix)
     num_workers = kwargs.get('num_workers', 1)
     tile_size = kwargs.pop('tile_size', [4096, 4096])
     scale = kwargs.pop('scale', 1.0)
@@ -176,7 +177,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
         resolution = renderer.resolution / scale
     render_settings['scale'] = scale
     out_prefix = out_prefix.replace('\\', '/')
-    print("renderer.plan_render_series")
+    print("renderer.plan_render_series") 
     render_series = renderer.plan_render_series(tile_size, prefix=out_prefix,
                     scale=scale, **kwargs)
     if use_tensorstore:

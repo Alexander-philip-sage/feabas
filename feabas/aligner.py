@@ -160,6 +160,7 @@ class Stack:
             if bool(slist):
                 section_list = sorted([os.path.basename(s).replace('.h5', '') for s in slist])
             else:
+                #pass
                 raise RuntimeError(f'no section found. looked in {mesh_regex}')
             section_order_file = kwargs.get('section_order_file', os.path.join(self._mesh_dir, 'section_order.txt'))
             section_list = rearrange_section_order(section_list, section_order_file)[0]

@@ -49,7 +49,7 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[st
     if not meta_list:
         meta_regex = os.path.join(meta_dir,'*.json')
         meta_list = sorted(glob.glob(meta_regex))
-        assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
+        #assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
         meta_list = meta_list[arg_indx]
     if parallel_within_section or num_workers == 1:
         for metafile in meta_list:
@@ -377,7 +377,7 @@ def downsample_main(meta_list=None):
 def setup_pair_names(img_dir,root_dir,  compare_distance):
     img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
     imglist = sorted(glob.glob(img_regex))
-    assert len(imglist)>0, f"couldn't find any png files in {img_regex}"
+    #assert len(imglist)>0, f"couldn't find any png files in {img_regex}"
     section_order_file = os.path.join(root_dir, 'section_order.txt')
     imglist = common.rearrange_section_order(imglist, section_order_file)[0]
     bname_list = [os.path.basename(s) for s in imglist]
@@ -388,7 +388,7 @@ def setup_pair_names(img_dir,root_dir,  compare_distance):
     pairnames.sort()
     return imglist, bname_list, pairnames
 
-def align_main(pairnames=None):
+def align_main(pairnames=None, num_workers:int =None):
     start_alignment = time.time()
     os.makedirs(match_dir, exist_ok=True)
     os.makedirs(manual_dir, exist_ok=True)
@@ -450,6 +450,8 @@ if __name__ == '__main__':
     if mode == 'downsample':
         downsample_main()
     elif mode == 'alignment':
-        align_main()
+        assert num_workers, "num_workers must have a value"
+        print("num_workers", num_workers)
+        align_main(num_workers=num_workers)
     time_region.log_summary()
 
