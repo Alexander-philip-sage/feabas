@@ -2,10 +2,10 @@ import time
 import logging
 from collections import defaultdict
 import os, csv
-#from mpi4py import MPI
-#COMM = MPI.COMM_WORLD
-#RANK = COMM.Get_rank()
-#NUMRANKS = COMM.Get_size()
+from mpi4py import MPI
+COMM = MPI.COMM_WORLD
+RANK = COMM.Get_rank()
+NUMRANKS = COMM.Get_size()
 RANK=None
 class TimeRegion():
     def __init__(self):
@@ -18,7 +18,7 @@ class TimeRegion():
         if RANK is None or RANK==0:
             if logging.root.level>logging.INFO:
                 print(f"Warning. root log level {logging.root.level}. likely will not print time region logging")
-            print("timing information")
+            #print("timing information")
             logging.info("rank {}".format( RANK))
             #logging.info("regions {}".format(str(self.region_time.keys())))
             regions = list(self.region_time.keys())

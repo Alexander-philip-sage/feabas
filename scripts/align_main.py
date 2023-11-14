@@ -194,7 +194,6 @@ def optimize_main(section_list):
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
-
 def offset_bbox_main():
     logger_info = logging.initialize_main_logger(logger_name='offset_bbox', mp=False)
     logger = logging.get_logger(logger_info[0])

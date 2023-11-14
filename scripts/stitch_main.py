@@ -27,15 +27,13 @@ def match_one_section(coordname, outname, **kwargs):
     if err:
         outname = outname + '_err'
     stitcher.save_to_h5(outname, save_matches=True, save_meshes=False)
-    time_region.track_time("stitch_main.match_main", time.time() - start_match_one_section)
+    time_region.track_time("stitch_main.match_one_section", time.time() - start_match_one_section)
     return 1
 
 def match_main(coord_list, out_dir, **kwargs):
     start_match_main = time.time()
     num_workers = kwargs.get('num_workers', 1)
-    if 'num_workers' in kwargs.keys():
-        print(f"num workers found in match_one_section. num_workers: {kwargs['num_workers']}")
-    else:
+    if 'num_workers' not in kwargs.keys():
         print(f"num workers not set. setting to {num_workers}")
     logger_info = logging.initialize_main_logger(logger_name='stitch_matching', mp=num_workers>1)
     kwargs['logger'] = logger_info[0]
@@ -138,7 +136,7 @@ def optmization_main(match_list, out_dir, **kwargs):
             target_func(matchname, outname)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for matchname in match_list:
                 outname = os.path.join(out_dir, os.path.basename(matchname))
                 if os.path.isfile(outname):
@@ -155,7 +153,9 @@ def optmization_main(match_list, out_dir, **kwargs):
 def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
     print("render_one_section")
     out_prefix = os.path.abspath(out_prefix)
-    print(out_prefix)
+    meta_name = os.path.abspath(meta_name)
+    print("out_prefix\n",out_prefix)
+    print("meta_name\n",meta_name)
     num_workers = kwargs.get('num_workers', 1)
     tile_size = kwargs.pop('tile_size', [4096, 4096])
     scale = kwargs.pop('scale', 1.0)
@@ -200,7 +200,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
             metadata = {}
         jobs = []
         target_func = partial(MontageRenderer.subprocess_render_montages, **render_settings)
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for bboxes, filenames, hits in zip(bboxes_list, filenames_list, hits_list):
                 init_args = renderer.init_args(selected=hits)
                 job = executor.submit(target_func, init_args, bboxes, filenames)
@@ -210,6 +210,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
                     metadata.extend(job.result())
                 else:
                     metadata.update(job.result())
+    print("about to save ts_specs files")
     if (meta_name is not None) and (len(metadata) > 0):
         if use_tensorstore:
             meta_name = meta_name.replace('\\', '/')
@@ -221,6 +222,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
                 meta_name = 'file://' + meta_name
             meta_ts = ts.open({"driver": "json", "kvstore": meta_name}).result()
             meta_ts.write({0: store.spec(minimal_spec=True).to_json()}).result()
+            print("wrote to ", meta_name)
         else:
             fnames = sorted(list(metadata.keys()))
             bboxes = []
@@ -228,6 +230,8 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
                 bboxes.append(metadata[fname])
             out_loader = dal.StaticImageLoader(fnames, bboxes=bboxes, resolution=resolution)
             out_loader.to_coordinate_file(meta_name)
+    else:
+        print("metadata from rendering not being saved meta_name", meta_name)
     return len(metadata)
 
 
@@ -339,15 +343,16 @@ def setup_globals(args):
         generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
         stitch_configs = config.stitch_configs(root_dir)
     num_cpus = generate_settings['cpu_budget']
-    if ('match' in args.mode.lower()) and ('optimiz' in args.mode.lower()):
+    mode = args.mode.lower()
+    if ('match' in mode) and (('optimiz' in mode) and ('render' not in mode)):
         mode = "matching_optimize"
-    elif args.mode.lower().startswith('r'):
+    elif mode.startswith('r'):
         mode = 'rendering'
-    elif args.mode.lower().startswith('o'):
+    elif mode.startswith('o'):
         mode = 'optimization'
-    elif args.mode.lower().startswith('m'):
+    elif mode.startswith('m'):
         mode = 'matching'
-    if mode=='all':
+    if mode in ["matching_optimize_render", 'all'] :
         num_workers = stitch_configs.get('num_workers', 1)
         if num_workers > num_cpus:
             print("warning: num_workers has been reduced to the num_cpus found", num_cpus)

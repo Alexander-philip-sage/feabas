@@ -8,6 +8,8 @@ stitch_thumbnailalign.o*
 stitch_thumbnailalign.e*
 runs
 thumb_precomputed.*
+pipeline.e*
+pipeline.o*
 work_dir_W01
 work_dir4
 work_dir69

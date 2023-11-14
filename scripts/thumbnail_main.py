@@ -32,7 +32,7 @@ def generate_stitched_mipmaps(img_dir, max_mip,meta_list: List[str] =None, **kwa
         target_func = partial(mip_map_one_section, img_dir=img_dir,
                                 max_mip=max_mip, num_workers=1, **kwargs)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 job = executor.submit(target_func, sname)
                 jobs.append(job)
@@ -49,7 +49,7 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[st
     if not meta_list:
         meta_regex = os.path.join(meta_dir,'*.json')
         meta_list = sorted(glob.glob(meta_regex))
-        #assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
+        assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
         meta_list = meta_list[arg_indx]
     if parallel_within_section or num_workers == 1:
         for metafile in meta_list:
@@ -57,7 +57,7 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[st
     else:
         target_func = parallel_within_section(mipmap.generate_tensorstore_scales, mips=tgt_mips, **kwargs)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for metafile in meta_list:
                 job = executor.submit(target_func, metafile)
                 jobs.append(job)
@@ -89,7 +89,7 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
             common.imwrite(outname, img_out)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 outname = os.path.join(out_dir, sname + '.png')
                 if os.path.isfile(outname):
@@ -125,7 +125,7 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, meta_list: List[str]=None,
             common.imwrite(outname, img_out)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for meta_name in meta_list:
                 sname = os.path.basename(meta_name).replace('.json', '')
                 outname = os.path.join(out_dir, sname + '.png')
@@ -188,7 +188,7 @@ def generate_thumbnail_masks(mesh_dir, out_dir, seclist=None, **kwargs):
             target_func(mname, outname)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for mname in mesh_list:
                 sname = os.path.basename(mname).replace('.h5', '')
                 outname = os.path.join(out_dir, sname + '.png')
@@ -258,6 +258,7 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Align thumbnails")
+    parser.add_argument("--work_dir", metavar="work_dir", type=str, default=None)    
     parser.add_argument("--mode", metavar="mode", type=str, default='downsample')
     parser.add_argument("--start", metavar="start", type=int, default=0)
     parser.add_argument("--step", metavar="step", type=int, default=1)
@@ -265,9 +266,17 @@ def parse_args(args=None):
     parser.add_argument("--reverse",  action='store_true')
     return parser.parse_args(args)
 
-def setup_globals(args):
-    root_dir = config.get_work_dir()
-    generate_settings = config.general_settings()
+def setup_globals(args): 
+    if not args.work_dir:
+        root_dir = config.get_work_dir()
+        generate_settings = config.general_settings()
+        stitch_configs = config.stitch_configs()
+    else:
+        root_dir = args.work_dir
+        config._default_configuration_folder = args.work_dir
+        generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
+        stitch_configs = config.stitch_configs(root_dir)
+
     num_cpus = generate_settings['cpu_budget']
 
     thumbnail_configs = config.thumbnail_configs()
@@ -280,7 +289,7 @@ def setup_globals(args):
         mode = 'alignment'
     else:
         raise ValueError
-
+    thumbnail_configs['root_dir'] = root_dir
     num_workers = thumbnail_configs.get('num_workers', 1)
     if num_workers > num_cpus:
         print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
@@ -302,9 +311,9 @@ def setup_globals(args):
             stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
             match_dir, feature_match_dir)
 
-def downsample_main(meta_list=None):
+def downsample_main(thumbnail_configs,meta_list=None):
     start_downsample=time.time()
-    logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=num_workers>1)
+    logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=thumbnail_configs.get('num_workers', 1)>1)
     thumbnail_configs['logger'] = logger_info[0]
     logger= logging.get_logger(logger_info[0])
     align_mip = config.align_configs()['matching']['working_mip_level']
@@ -340,11 +349,11 @@ def downsample_main(meta_list=None):
         thumbnail_configs.setdefault('highpass', highpass)
         slist = generate_thumbnails(src_dir, img_dir, **thumbnail_configs)
     elif driver =='neuroglancer_precomputed':
-        stitch_dir = os.path.join(root_dir, 'stitch')
+        stitch_dir = os.path.join(thumbnail_configs['root_dir'], 'stitch')
         meta_dir = os.path.join(stitch_dir, 'ts_specs')
         tgt_mips = [align_mip]
         if thumbnail_configs.get('thumbnail_highpass', True):
-            highpass_inter_mip_lvl = thumbnail_configs.pop('highpass_inter_mip_lvl', max(0, thumbnail_mip_lvl-2))
+            highpass_inter_mip_lvl = thumbnail_configs.get('highpass_inter_mip_lvl', 4)
             assert highpass_inter_mip_lvl < thumbnail_mip_lvl
             downsample = 2 ** (thumbnail_mip_lvl - highpass_inter_mip_lvl)
             if downsample >= 4:
@@ -364,7 +373,7 @@ def downsample_main(meta_list=None):
         thumbnail_configs.setdefault('mip', thumbnail_mip_lvl)
         slist = generate_thumbnails_tensorstore(meta_dir, img_dir,meta_list=meta_list, **thumbnail_configs)
     else:
-        raise NotImplementedError("saving with other file types not tested")
+        raise NotImplementedError("saving with other file types is not tested")
     mask_scale = 1 / (2 ** thumbnail_mip_lvl)
     generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, scale=mask_scale,
                                 img_dir=img_dir, **thumbnail_configs)
@@ -374,10 +383,11 @@ def downsample_main(meta_list=None):
     logger.info('finished thumbnail downsample.')
     logging.terminate_logger(*logger_info)
 
-def setup_pair_names(img_dir,root_dir,  compare_distance):
-    img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
-    imglist = sorted(glob.glob(img_regex))
-    #assert len(imglist)>0, f"couldn't find any png files in {img_regex}"
+def setup_pair_names(img_dir,root_dir,  compare_distance, imglist=None):
+    if not imglist:
+        img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
+        imglist = sorted(glob.glob(img_regex))
+        assert len(imglist)>0, f"couldn't find any png files in {img_regex}"
     section_order_file = os.path.join(root_dir, 'section_order.txt')
     imglist = common.rearrange_section_order(imglist, section_order_file)[0]
     bname_list = [os.path.basename(s) for s in imglist]
@@ -421,7 +431,7 @@ def align_main(pairnames=None, num_workers:int =None):
         indx_j = np.linspace(0, len(pairnames), num=Njobs+1, endpoint=True)
         indx_j = np.unique(np.round(indx_j).astype(np.int32))
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
                 prnm = pairnames[idx0:idx1]
                 job = executor.submit(target_func, pairnames=prnm)
@@ -448,7 +458,7 @@ if __name__ == '__main__':
         arg_indx = slice(stt_idx, stp_idx, step)
 
     if mode == 'downsample':
-        downsample_main()
+        downsample_main(thumbnail_configs)
     elif mode == 'alignment':
         assert num_workers, "num_workers must have a value"
         print("num_workers", num_workers)

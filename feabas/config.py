@@ -78,8 +78,11 @@ def material_table_file():
 
 
 @lru_cache(maxsize=1)
-def align_config_file():
-    work_dir = get_work_dir()
+def align_config_file(root_dir=None):
+    if root_dir:
+        work_dir = root_dir
+    else:
+        work_dir = get_work_dir()
     config_file = os.path.join(work_dir, 'configs', 'alignment_configs.yaml')
     if not os.path.isfile(config_file):
         config_file = os.path.join(_default_configuration_folder, 'default_alignment_configs.yaml')
@@ -88,10 +91,15 @@ def align_config_file():
 
 
 @lru_cache(maxsize=1)
-def align_configs():
-    with open(align_config_file(), 'r') as f:
-        conf = yaml.safe_load(f)
-    section_thickness = general_settings().get('section_thickness', None)
+def align_configs(root_dir=None):
+    if root_dir:
+        with open(align_config_file(root_dir), 'r') as f:
+            conf = yaml.safe_load(f)
+        section_thickness = general_settings(config_dir=os.path.join(root_dir, 'configs')).get('section_thickness', None)
+    else:
+        with open(align_config_file(), 'r') as f:
+            conf = yaml.safe_load(f)
+        section_thickness = general_settings().get('section_thickness', None)
     if (section_thickness is not None) and (conf.get('matching', {}).get('working_mip_level', None) is None):
         align_mip = max(0, math.floor(math.log2(section_thickness / DEFAULT_RESOLUTION)))
         conf.setdefault('matching', {})
@@ -104,6 +112,7 @@ def thumbnail_config_file():
     work_dir = get_work_dir()
     config_file = os.path.join(work_dir, 'configs', 'thumbnail_configs.yaml')
     if not os.path.isfile(config_file):
+        print("couldn't find personal file at", config_file)
         config_file = os.path.join(_default_configuration_folder, 'default_thumbnail_configs.yaml')
         assert(os.path.isfile(config_file)), f"failed to find thumbnail config file at {config_file}"
     return config_file

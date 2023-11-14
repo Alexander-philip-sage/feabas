@@ -490,7 +490,6 @@ class Stack:
                 costs.update(cst)
         return costs
 
-
     def optimize_section_list(self, section_list, **kwargs):
         target_gear = kwargs.get('target_gear', const.MESH_GEAR_MOVING)
         optimize_rigid = kwargs.get('optimize_rigid', True)
