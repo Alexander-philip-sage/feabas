@@ -33,11 +33,11 @@ def setup_neuroglancer_precomputed(work_dir):
 if __name__=='__main__':
     args = parse_args()
     num_workers=None
+    arg_indx=None
     if args.mode=='downsample':
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         print("work_dir", work_dir)
-        thumbnail_configs['img_dir']=img_dir
-        stitch_conf = config.stitch_configs()['rendering']
+        stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
         if driver == 'image':        
             min_mip = thumbnail_configs.get('min_mip', 0)
@@ -50,6 +50,7 @@ if __name__=='__main__':
                 arg_indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
             else:
                 arg_indx = slice(RANK*sections_per_rank, len(meta_list), 1)
+            #thumbnail_configs['arg_indx']=arg_indx
             downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list[arg_indx])
         elif driver =='neuroglancer_precomputed':
             meta_list, meta_dir = setup_neuroglancer_precomputed(work_dir)
@@ -71,7 +72,7 @@ if __name__=='__main__':
         args.mode = 'downsample'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         print("work_dir", work_dir)
-        stitch_conf = config.stitch_configs()['rendering']
+        stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
         meta_list, meta_dir = setup_neuroglancer_precomputed(work_dir)
         section_names = sorted([os.path.basename(x).split(".")[0] for x in meta_list])

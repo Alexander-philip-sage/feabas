@@ -151,11 +151,11 @@ def optmization_main(match_list, out_dir, **kwargs):
 
 
 def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
-    print("render_one_section")
+    #print("render_one_section")
     out_prefix = os.path.abspath(out_prefix)
     meta_name = os.path.abspath(meta_name)
-    print("out_prefix\n",out_prefix)
-    print("meta_name\n",meta_name)
+    #print("out_prefix\n",out_prefix)
+    #print("meta_name\n",meta_name)
     num_workers = kwargs.get('num_workers', 1)
     tile_size = kwargs.pop('tile_size', [4096, 4096])
     scale = kwargs.pop('scale', 1.0)
@@ -169,7 +169,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
         loader_settings['cache_size'] = loader_settings['cache_size'] // num_workers
     if meta_name is not None and os.path.isfile(meta_name):
         return None
-    print("MontageRenderer.from_h5")
+    #print("MontageRenderer.from_h5")
     renderer = MontageRenderer.from_h5(tform_name, loader_settings=loader_settings)
     if resolution is not None:
         scale = renderer.resolution / resolution
@@ -177,7 +177,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
         resolution = renderer.resolution / scale
     render_settings['scale'] = scale
     out_prefix = out_prefix.replace('\\', '/')
-    print("renderer.plan_render_series") 
+    #print("renderer.plan_render_series") 
     render_series = renderer.plan_render_series(tile_size, prefix=out_prefix,
                     scale=scale, **kwargs)
     if use_tensorstore:
@@ -193,7 +193,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
         metadata = renderer.render_series_to_file(bboxes, filenames, **render_settings)
     else:
         bboxes_list, filenames_list, hits_list = renderer.divide_render_jobs(render_series,
-            num_workers=num_workers, max_tile_per_job=20)
+                                                    num_workers=num_workers, max_tile_per_job=20)
         if use_tensorstore:
             metadata = []
         else:
@@ -210,7 +210,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
                     metadata.extend(job.result())
                 else:
                     metadata.update(job.result())
-    print("about to save ts_specs files")
+    #print("about to save ts_specs files")
     if (meta_name is not None) and (len(metadata) > 0):
         if use_tensorstore:
             meta_name = meta_name.replace('\\', '/')

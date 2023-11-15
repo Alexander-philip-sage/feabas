@@ -666,7 +666,7 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 bboxes_out_list.append(bboxes_out[idx0:idx1])
         submeshes = mesh.submeshes_from_bboxes(bbox_unions, save_material=True)
         jobs = []
-        print(f"running render_whole_mesh with {num_workers} workers")
+        #print(f"running render_whole_mesh with {num_workers} workers")
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             if driver == 'image':
                 for msh, bbox, fnames in zip(submeshes, bboxes_list, filenames_list):
@@ -695,7 +695,7 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
 def subprocess_render_mesh_tiles(imgloader, mesh, bboxes, outnames, **kwargs):
     target_resolution = kwargs.pop('target_resolution')
     bboxes_out = kwargs.pop('bboxes_out', bboxes)
-    print("subprocess_render_mesh_tiles outnames", outnames)
+    #print("subprocess_render_mesh_tiles outnames", outnames)
     if isinstance(imgloader, (str, dict)):
         imgloader = dal.get_loader_from_json(imgloader)
     if isinstance(mesh, str):

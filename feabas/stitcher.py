@@ -1451,7 +1451,7 @@ class MontageRenderer:
             bboxes.append(bbox)
             if driver == 'image':
                 xmin, ymin, xmax, ymax = bbox
-                keyword_replaces = [str(r+one_based), str(c+one_based), str(xmin), str(ymin), str(xmax), str(ymax)]
+                keyword_replaces = [str(r+one_based).zfill(2), str(c+one_based).zfill(2), str(xmin), str(ymin), str(xmax), str(ymax)]
                 fname = pattern
                 for kw, kwr in zip(keywords, keyword_replaces):
                     fname = fname.replace(kw, kwr)

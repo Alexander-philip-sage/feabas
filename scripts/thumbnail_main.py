@@ -66,14 +66,15 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[st
     logger.info('mipmapping generated.')
 
 
-def generate_thumbnails(src_dir, out_dir, **kwargs):
+def generate_thumbnails(src_dir, out_dir,meta_list=None, **kwargs):
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = kwargs.pop('logger', None)
     logger = logging.get_logger(logger_info)
     meta_regex = os.path.join(src_dir, '**', 'metadata.txt')
-    meta_list = sorted(glob.glob(meta_regex, recursive=True))
     assert len(meta_list)>0, f"couldn't find any metadata.txt files in {meta_regex}"
-    meta_list = meta_list[arg_indx]
+    if not meta_list:
+        meta_list = sorted(glob.glob(meta_regex, recursive=True))
+        meta_list = meta_list[arg_indx]
     secnames = [os.path.basename(os.path.dirname(s)) for s in meta_list]
     target_func = partial(mipmap.create_thumbnail, **kwargs)
     os.makedirs(out_dir, exist_ok=True)
@@ -289,7 +290,7 @@ def setup_globals(args):
         mode = 'alignment'
     else:
         raise ValueError
-    thumbnail_configs['root_dir'] = root_dir
+    #thumbnail_configs['work_dir'] = root_dir
     thumbnail_configs['thumbnail_mip_lvl'] = thumbnail_mip_lvl
     num_workers = thumbnail_configs.get('num_workers', 1)
     if num_workers > num_cpus:
@@ -301,15 +302,17 @@ def setup_globals(args):
 
     thumbnail_dir = os.path.join(root_dir, 'thumbnail_align')
     stitch_tform_dir = os.path.join(root_dir, 'stitch', 'tform')
-    img_dir = os.path.join(thumbnail_dir, 'thumbnails')
+    thumbnail_img_dir = os.path.join(thumbnail_dir, 'thumbnails')
     mat_mask_dir = os.path.join(thumbnail_dir, 'material_masks')
     reg_mask_dir = os.path.join(thumbnail_dir, 'region_masks')
     manual_dir = os.path.join(thumbnail_dir, 'manual_matches')
     match_dir = os.path.join(thumbnail_dir, 'matches')
     feature_match_dir = os.path.join(thumbnail_dir, 'feature_matches')
+    thumbnail_configs['thumbnail_img_dir'] = thumbnail_img_dir
+    thumbnail_configs['stitch_tform_dir'] = stitch_tform_dir
     return (root_dir, generate_settings, num_cpus, thumbnail_configs, 
             thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, 
-            stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
+            stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
             match_dir, feature_match_dir)
 
 def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
@@ -317,17 +320,18 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=thumbnail_configs.get('num_workers', 1)>1)
     thumbnail_configs['logger'] = logger_info[0]
     logger= logging.get_logger(logger_info[0])
-    align_mip = config.align_configs()['matching']['working_mip_level']
-    stitch_conf = config.stitch_configs()['rendering']
+    align_mip = config.align_configs(work_dir)['matching']['working_mip_level']
+    stitch_conf = config.stitch_configs(work_dir)['rendering']
     driver = stitch_conf.get('driver', 'image')
+    stitch_tform_dir=thumbnail_configs['stitch_tform_dir']
     thumbnail_mip_lvl = thumbnail_configs['thumbnail_mip_lvl']
-    if 'img_dir' in thumbnail_configs.keys():
-        img_dir = thumbnail_configs['img_dir']
+    if 'thumbnail_img_dir' in thumbnail_configs.keys():
+        thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
     if driver == 'image':
         max_mip = thumbnail_configs.pop('max_mip', max(0, thumbnail_mip_lvl-1))
         max_mip = max(align_mip, max_mip)
         src_dir0 = config.stitch_render_dir(work_dir)
-        print("src_dir0", src_dir0)
+        #print("src_dir0", src_dir0)
         pattern = stitch_conf['filename_settings']['pattern']
         one_based = stitch_conf['filename_settings']['one_based']
         fillval = stitch_conf['loader_settings'].get('fillval', 0)
@@ -352,9 +356,9 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
             highpass = False
         thumbnail_configs.setdefault('downsample', downsample)
         thumbnail_configs.setdefault('highpass', highpass)
-        slist = generate_thumbnails(src_dir, img_dir, **thumbnail_configs)
+        slist = generate_thumbnails(src_dir, thumbnail_img_dir,meta_list=meta_list, **thumbnail_configs)
     elif driver =='neuroglancer_precomputed':
-        stitch_dir = os.path.join(thumbnail_configs['root_dir'], 'stitch')
+        stitch_dir = os.path.join(thumbnail_configs['work_dir'], 'stitch')
         meta_dir = os.path.join(stitch_dir, 'ts_specs')
         tgt_mips = [align_mip]
         if thumbnail_configs.get('thumbnail_highpass', True):
@@ -376,14 +380,14 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
         generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips,meta_list=meta_list, **thumbnail_configs)
         thumbnail_configs.setdefault('highpass', highpass)
         thumbnail_configs.setdefault('mip', thumbnail_mip_lvl)
-        slist = generate_thumbnails_tensorstore(meta_dir, img_dir,meta_list=meta_list, **thumbnail_configs)
+        slist = generate_thumbnails_tensorstore(meta_dir, thumbnail_img_dir,meta_list=meta_list, **thumbnail_configs)
     else:
         raise NotImplementedError("saving with other file types is not tested")
     mask_scale = 1 / (2 ** thumbnail_mip_lvl)
     generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, scale=mask_scale,
-                                img_dir=img_dir, **thumbnail_configs)
+                                img_dir=thumbnail_img_dir, **thumbnail_configs)
     generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=None, scale=mask_scale,
-                                img_dir=img_dir, **thumbnail_configs)
+                                img_dir=thumbnail_img_dir, **thumbnail_configs)
     time_region.track_time('thumbnail_main.downsample', time.time() - start_downsample)
     logger.info('finished thumbnail downsample.')
     logging.terminate_logger(*logger_info)
@@ -461,7 +465,7 @@ if __name__ == '__main__':
         arg_indx = slice(stp_idx, stt_idx, -step)
     else:
         arg_indx = slice(stt_idx, stp_idx, step)
-
+    #thumbnail_configs['arg_indx']=arg_indx
     if mode == 'downsample':
         downsample_main(thumbnail_configs)
     elif mode == 'alignment':

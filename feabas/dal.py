@@ -572,6 +572,8 @@ class StaticImageLoader(AbstractImageLoader):
             self.imgrootdir = os.path.dirname(os.path.commonprefix(filepaths))
             self.imgrelpaths = [os.path.relpath(s, self.imgrootdir) for s in filepaths]
         self.check_filename_uniqueness()
+        #print("StaticImageLoader self.imgrelpaths", self.imgrelpaths)
+        #print("self.imgrootdir", self.imgrootdir)
         if len(bboxes) == 0:
             tile_size = kwargs.get('tile_size', None)
             if tile_size is None:
@@ -622,6 +624,8 @@ class StaticImageLoader(AbstractImageLoader):
     def from_coordinate_file(cls, filename, **kwargs):
         imgpaths, bboxes, root_dir, resolution = common.parse_coordinate_files(filename, **kwargs)
         kwargs.setdefault('root_dir', root_dir)
+        #print("from_coordinate_file root_dir",root_dir )
+        #print("kwargs['root_dir']",kwargs['root_dir'] )
         kwargs.setdefault('resolution', resolution)
         return cls(filepaths=imgpaths, bboxes=bboxes, **kwargs)
 
@@ -733,7 +737,7 @@ class StaticImageLoader(AbstractImageLoader):
             imgpath = fileid
         else:
             imgpath = os.path.join(self.imgrootdir, self.imgrelpaths[fileid])
-        print("_read_image imgpath",imgpath)
+        #print("_read_image imgpath",imgpath)
         img = super()._read_image(imgpath, **kwargs)
         if self._dtype is None:
             self._dtype = img.dtype
