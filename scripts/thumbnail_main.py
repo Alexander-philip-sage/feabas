@@ -273,13 +273,13 @@ def setup_globals(args):
         stitch_configs = config.stitch_configs()
     else:
         root_dir = args.work_dir
-        config._default_configuration_folder = args.work_dir
-        generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
+        config._default_configuration_folder = os.path.join(root_dir, "configs")
+        generate_settings= config.general_settings(config._default_configuration_folder)
         stitch_configs = config.stitch_configs(root_dir)
 
     num_cpus = generate_settings['cpu_budget']
 
-    thumbnail_configs = config.thumbnail_configs()
+    thumbnail_configs = config.thumbnail_configs(root_dir)
     thumbnail_mip_lvl = thumbnail_configs.get('thumbnail_mip_level', 6)
     if args.mode.lower().startswith('d'):
         thumbnail_configs = thumbnail_configs['downsample']
@@ -290,6 +290,7 @@ def setup_globals(args):
     else:
         raise ValueError
     thumbnail_configs['root_dir'] = root_dir
+    thumbnail_configs['thumbnail_mip_lvl'] = thumbnail_mip_lvl
     num_workers = thumbnail_configs.get('num_workers', 1)
     if num_workers > num_cpus:
         print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
@@ -319,10 +320,12 @@ def downsample_main(thumbnail_configs,meta_list=None):
     align_mip = config.align_configs()['matching']['working_mip_level']
     stitch_conf = config.stitch_configs()['rendering']
     driver = stitch_conf.get('driver', 'image')
+    thumbnail_mip_lvl = thumbnail_configs['thumbnail_mip_lvl']
     if driver == 'image':
         max_mip = thumbnail_configs.pop('max_mip', max(0, thumbnail_mip_lvl-1))
         max_mip = max(align_mip, max_mip)
         src_dir0 = config.stitch_render_dir()
+        print("src_dir0", src_dir0)
         pattern = stitch_conf['filename_settings']['pattern']
         one_based = stitch_conf['filename_settings']['one_based']
         fillval = stitch_conf['loader_settings'].get('fillval', 0)
@@ -353,7 +356,7 @@ def downsample_main(thumbnail_configs,meta_list=None):
         meta_dir = os.path.join(stitch_dir, 'ts_specs')
         tgt_mips = [align_mip]
         if thumbnail_configs.get('thumbnail_highpass', True):
-            highpass_inter_mip_lvl = thumbnail_configs.get('highpass_inter_mip_lvl', 4)
+            highpass_inter_mip_lvl = thumbnail_configs.get('highpass_inter_mip_lvl', max(0,thumbnail_mip_lvl-2))
             assert highpass_inter_mip_lvl < thumbnail_mip_lvl
             downsample = 2 ** (thumbnail_mip_lvl - highpass_inter_mip_lvl)
             if downsample >= 4:

@@ -99,7 +99,7 @@ def generate_mesh_main():
         material_table = material_table.save_to_json(jsonname=None)
         target_func = partial(generate_mesh_from_mask, material_table=material_table, **mesh_config)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 mask_names = [(os.path.join(alt_mask_dir, sname + '.json'), alt_mask_resolution),
                               (os.path.join(alt_mask_dir, sname + '.txt'), alt_mask_resolution),
@@ -306,7 +306,7 @@ def generate_aligned_mipmaps(render_dir, max_mip, meta_list=None, **kwargs):
         target_func = partial(mip_map_one_section, img_dir=render_dir,
                                 max_mip=max_mip, num_workers=1, **kwargs)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 job = executor.submit(target_func, sname)
                 jobs.append(job)

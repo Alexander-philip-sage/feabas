@@ -108,9 +108,13 @@ def align_configs(root_dir=None):
 
 
 @lru_cache(maxsize=1)
-def thumbnail_config_file():
-    work_dir = get_work_dir()
+def thumbnail_config_file(root_dir=None):
+    if root_dir:
+        work_dir = root_dir
+    else:
+        work_dir = get_work_dir()
     config_file = os.path.join(work_dir, 'configs', 'thumbnail_configs.yaml')
+    print("config file", config_file)
     if not os.path.isfile(config_file):
         print("couldn't find personal file at", config_file)
         config_file = os.path.join(_default_configuration_folder, 'default_thumbnail_configs.yaml')
@@ -119,8 +123,8 @@ def thumbnail_config_file():
 
 
 @lru_cache(maxsize=1)
-def thumbnail_configs():
-    with open(thumbnail_config_file(), 'r') as f:
+def thumbnail_configs(work_dir=None):
+    with open(thumbnail_config_file(work_dir), 'r') as f:
         conf = yaml.safe_load(f)
     return conf
 

@@ -478,7 +478,7 @@ class Stack:
             kwargs_r['start_loc'] = 'R'
             if num_workers > 1:
                 jobs = []
-                with ProcessPoolExecutor(max_workers=2, mp_context=get_context('spawn')) as executor:
+                with ProcessPoolExecutor(max_workers=2, mp_context=get_context('fork')) as executor:
                     jobs.append(executor.submit(Stack.subprocess_optimize_stack, init_dict_l, func_name, **kwargs_l))
                     jobs.append(executor.submit(Stack.subprocess_optimize_stack, init_dict_r, func_name, **kwargs_r))
                     for job in as_completed(jobs):

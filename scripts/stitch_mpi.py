@@ -30,6 +30,7 @@ def matching_check_status(coord_dir, match_dir):
     print(f"len(coord_sections) {len(coord_sections)} len(match_sections) {len(match_sections)} len(to_do_coord_sections) {len(to_do_coord_sections)}")
     if len(to_do_coord_sections)< len(coord_sections):
         print("reduced sections to stitch because", len(match_sections), "were already stitched")
+        print("coord_dir", coord_dir)
     return sorted([os.path.join(coord_dir, x+".txt") for x in list(to_do_coord_sections)])
 
 if __name__=='__main__':

@@ -339,13 +339,15 @@ def setup_globals(args):
         stitch_configs = config.stitch_configs()
     else:
         root_dir = args.work_dir
-        config._default_configuration_folder = args.work_dir
-        generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
+        config._default_configuration_folder = os.path.join(args.work_dir, 'configs')
+        generate_settings= config.general_settings(config._default_configuration_folder)
         stitch_configs = config.stitch_configs(root_dir)
     num_cpus = generate_settings['cpu_budget']
     mode = args.mode.lower()
     if ('match' in mode) and (('optimiz' in mode) and ('render' not in mode)):
         mode = "matching_optimize"
+    if ('match' in mode) and (('optimiz' in mode) and ('render' in mode)):
+        mode = "matching_optimize_render"
     elif mode.startswith('r'):
         mode = 'rendering'
     elif mode.startswith('o'):

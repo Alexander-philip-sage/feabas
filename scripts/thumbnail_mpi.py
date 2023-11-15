@@ -40,7 +40,8 @@ if __name__=='__main__':
         driver = stitch_conf.get('driver', 'image')
         if driver == 'image':        
             min_mip = thumbnail_configs.get('min_mip', 0)
-            meta_dir = os.path.join(img_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
+            stitched_dir = os.path.join(root_dir, 'stitched_sections')
+            meta_dir = os.path.join(stitched_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
             meta_list = sorted(glob.glob(meta_dir, recursive=True))
             assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
             sections_per_rank = int(math.ceil(len(meta_list)/NUMRANKS))
@@ -48,10 +49,10 @@ if __name__=='__main__':
                 arg_indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
             else:
                 arg_indx = slice(RANK*sections_per_rank, len(meta_list), 1)
-            downsample_main(meta_list = meta_list[arg_indx])
+            downsample_main(thumbnail_configs,meta_list = meta_list[arg_indx])
         elif driver =='neuroglancer_precomputed':
             meta_list, meta_dir = setup_neuroglancer_precomputed(root_dir)
-            downsample_main(meta_list=meta_list)        
+            downsample_main(thumbnail_configs,meta_list=meta_list)        
     elif args.mode == 'alignment':
         root_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         print("work_dir", root_dir)

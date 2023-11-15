@@ -105,6 +105,8 @@ def mip_one_level(src_dir, out_dir, **kwargs):
         os.makedirs(out_root_dir, exist_ok=True)
         kwargs.setdefault('seeds', downsample)
         kwargs.setdefault('mx_dis', (tile_size[0]/2+4, tile_size[-1]/2+4))
+        print("prefix", prefix)
+        print("pattern", pattern)
         rendered = render_whole_mesh(M, image_loader, prefix, tile_size=tile_size,
                                      pattern=pattern+'.'+ext_out, scale= 1/downsample,
                                      **kwargs)
@@ -133,6 +135,7 @@ def mip_map_one_section(sec_name, img_dir, max_mip, **kwargs):
     for m in range(max_mip):
         src_dir = os.path.join(img_dir, 'mip'+str(m), sec_name)
         out_dir = os.path.join(img_dir, 'mip'+str(m+1), sec_name)
+        print("out_dir", out_dir)
         n_tile = mip_one_level(src_dir, out_dir, output_format=ext_out,
                                       downsample=2, **kwargs)
         if n_tile is None:
@@ -272,7 +275,7 @@ def generate_target_tensorstore_scale(metafile, mip=None, **kwargs):
         indices = np.unique(indices).astype(np.uint32)
         jobs = []
         out_spec = None
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for idx0, idx1 in zip(indices[:-1], indices[1:]):
                 idx0, idx1 = int(idx0), int(idx1)
                 bbox_t = bboxes[idx0:idx1]
