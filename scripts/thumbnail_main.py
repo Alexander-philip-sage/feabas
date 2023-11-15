@@ -312,7 +312,7 @@ def setup_globals(args):
             stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
             match_dir, feature_match_dir)
 
-def downsample_main(thumbnail_configs,meta_list=None):
+def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     start_downsample=time.time()
     logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=thumbnail_configs.get('num_workers', 1)>1)
     thumbnail_configs['logger'] = logger_info[0]
@@ -321,10 +321,12 @@ def downsample_main(thumbnail_configs,meta_list=None):
     stitch_conf = config.stitch_configs()['rendering']
     driver = stitch_conf.get('driver', 'image')
     thumbnail_mip_lvl = thumbnail_configs['thumbnail_mip_lvl']
+    if 'img_dir' in thumbnail_configs.keys():
+        img_dir = thumbnail_configs['img_dir']
     if driver == 'image':
         max_mip = thumbnail_configs.pop('max_mip', max(0, thumbnail_mip_lvl-1))
         max_mip = max(align_mip, max_mip)
-        src_dir0 = config.stitch_render_dir()
+        src_dir0 = config.stitch_render_dir(work_dir)
         print("src_dir0", src_dir0)
         pattern = stitch_conf['filename_settings']['pattern']
         one_based = stitch_conf['filename_settings']['one_based']

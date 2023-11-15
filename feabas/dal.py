@@ -733,6 +733,7 @@ class StaticImageLoader(AbstractImageLoader):
             imgpath = fileid
         else:
             imgpath = os.path.join(self.imgrootdir, self.imgrelpaths[fileid])
+        print("_read_image imgpath",imgpath)
         img = super()._read_image(imgpath, **kwargs)
         if self._dtype is None:
             self._dtype = img.dtype

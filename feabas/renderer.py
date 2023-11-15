@@ -695,6 +695,7 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
 def subprocess_render_mesh_tiles(imgloader, mesh, bboxes, outnames, **kwargs):
     target_resolution = kwargs.pop('target_resolution')
     bboxes_out = kwargs.pop('bboxes_out', bboxes)
+    print("subprocess_render_mesh_tiles outnames", outnames)
     if isinstance(imgloader, (str, dict)):
         imgloader = dal.get_loader_from_json(imgloader)
     if isinstance(mesh, str):

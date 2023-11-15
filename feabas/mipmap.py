@@ -86,39 +86,47 @@ def mip_one_level(src_dir, out_dir, **kwargs):
         n_img = len(glob.glob(os.path.join(out_dir, '*.'+ext_out)))
         return -n_img
     rendered = {}
+    #try:
+    image_loader = get_image_loader(src_dir, pattern=pattern, tile_size=tile_size, **kwargs)
+    if image_loader is None:
+        return 0
+    pattern = os.path.splitext(pattern)[0]
+    M = _mesh_from_image_loader(image_loader)
+    if tile_size is None:
+        for bbox in image_loader.file_bboxes(margin=0):
+            tile_size = (bbox[3] - bbox[1], bbox[2] - bbox[0])
+            break
+    prefix0 = os.path.commonprefix(image_loader.imgrelpaths)
+    splitter = pattern.split('{')[0]
+    if splitter:
+        prefix0 = prefix0.split(splitter)[0]
+    prefix = os.path.join(out_dir, prefix0)
+    out_root_dir = os.path.dirname(prefix)
+    os.makedirs(out_root_dir, exist_ok=True)
+    kwargs.setdefault('seeds', downsample)
+    kwargs.setdefault('mx_dis', (tile_size[0]/2+4, tile_size[-1]/2+4))
+    print("mip_one_level prefix", prefix)
+    print("mip_one_level pattern", pattern)
+    rendered = render_whole_mesh(M, image_loader, prefix, tile_size=tile_size,
+                                    pattern=pattern+'.'+ext_out, scale= 1/downsample,
+                                    **kwargs)
+    '''except Exception as err:
+        print("failure in mesh rendering")
+        logger.error(f'{src_dir}: {err}')
+        raise err
+        return None'''
     try:
-        image_loader = get_image_loader(src_dir, pattern=pattern, tile_size=tile_size, **kwargs)
-        if image_loader is None:
-            return 0
-        pattern = os.path.splitext(pattern)[0]
-        M = _mesh_from_image_loader(image_loader)
-        if tile_size is None:
-            for bbox in image_loader.file_bboxes(margin=0):
-                tile_size = (bbox[3] - bbox[1], bbox[2] - bbox[0])
-                break
-        prefix0 = os.path.commonprefix(image_loader.imgrelpaths)
-        splitter = pattern.split('{')[0]
-        if splitter:
-            prefix0 = prefix0.split(splitter)[0]
-        prefix = os.path.join(out_dir, prefix0)
-        out_root_dir = os.path.dirname(prefix)
-        os.makedirs(out_root_dir, exist_ok=True)
-        kwargs.setdefault('seeds', downsample)
-        kwargs.setdefault('mx_dis', (tile_size[0]/2+4, tile_size[-1]/2+4))
-        print("prefix", prefix)
-        print("pattern", pattern)
-        rendered = render_whole_mesh(M, image_loader, prefix, tile_size=tile_size,
-                                     pattern=pattern+'.'+ext_out, scale= 1/downsample,
-                                     **kwargs)
         if len(rendered) > 0:
             fnames = sorted(list(rendered.keys()))
             bboxes = []
             for fname in fnames:
                 bboxes.append(rendered[fname])
+            print("mip_one_level fnames", fnames)
             out_loader = dal.StaticImageLoader(fnames, bboxes=bboxes,
                                                resolution=image_loader.resolution*downsample)
             out_loader.to_coordinate_file(out_meta_file)
     except Exception as err:
+        print("failure in writing coordinate file")
         logger.error(f'{src_dir}: {err}')
         raise err
         return None
@@ -135,7 +143,8 @@ def mip_map_one_section(sec_name, img_dir, max_mip, **kwargs):
     for m in range(max_mip):
         src_dir = os.path.join(img_dir, 'mip'+str(m), sec_name)
         out_dir = os.path.join(img_dir, 'mip'+str(m+1), sec_name)
-        print("out_dir", out_dir)
+        print("mip_map_one_section src_dir", src_dir)
+        print("mip_map_one_section out_dir", out_dir)
         n_tile = mip_one_level(src_dir, out_dir, output_format=ext_out,
                                       downsample=2, **kwargs)
         if n_tile is None:
