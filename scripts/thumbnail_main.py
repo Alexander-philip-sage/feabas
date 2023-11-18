@@ -163,7 +163,8 @@ def save_mask_for_one_sections(mesh_file, out_name, scale, **kwargs):
                 common.imwrite(thumb_name, thumb_out)
 
 
-def generate_thumbnail_masks(mesh_dir, out_dir, seclist=None, **kwargs):
+def generate_thumbnail_masks(mesh_dir, out_dir,seclist=None, **kwargs):
+    arg_indx = kwargs.get("arg_indx")
     num_workers = kwargs.get('num_workers', 1)
     scale = kwargs.get('scale')
     img_dir = kwargs.get('img_dir', None)
@@ -172,6 +173,7 @@ def generate_thumbnail_masks(mesh_dir, out_dir, seclist=None, **kwargs):
     logger_info = kwargs.get('logger', None)
     logger= logging.get_logger(logger_info)
     mesh_regex = os.path.abspath(os.path.join(mesh_dir, '*.h5'))
+    print("file lookup with glob")
     mesh_list = sorted(glob.glob(mesh_regex))
     assert len(mesh_list)>0, f"could not find an h5 files in mesh dir: mesh_regex {mesh_regex}"
     mesh_list = mesh_list[arg_indx]
@@ -290,7 +292,7 @@ def setup_globals(args):
         mode = 'alignment'
     else:
         raise ValueError
-    #thumbnail_configs['work_dir'] = root_dir
+    thumbnail_configs['work_dir'] = root_dir
     thumbnail_configs['thumbnail_mip_lvl'] = thumbnail_mip_lvl
     num_workers = thumbnail_configs.get('num_workers', 1)
     if num_workers > num_cpus:
@@ -310,6 +312,11 @@ def setup_globals(args):
     feature_match_dir = os.path.join(thumbnail_dir, 'feature_matches')
     thumbnail_configs['thumbnail_img_dir'] = thumbnail_img_dir
     thumbnail_configs['stitch_tform_dir'] = stitch_tform_dir
+    thumbnail_configs['mat_mask_dir'] = mat_mask_dir
+    thumbnail_configs['feature_match_dir'] = feature_match_dir
+    thumbnail_configs['match_dir'] = match_dir
+    thumbnail_configs['manual_dir'] = manual_dir
+    thumbnail_configs['reg_mask_dir'] = reg_mask_dir
     return (root_dir, generate_settings, num_cpus, thumbnail_configs, 
             thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, 
             stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
@@ -325,6 +332,11 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     driver = stitch_conf.get('driver', 'image')
     stitch_tform_dir=thumbnail_configs['stitch_tform_dir']
     thumbnail_mip_lvl = thumbnail_configs['thumbnail_mip_lvl']
+    thumbnail_img_dir=thumbnail_configs['thumbnail_img_dir']
+    stitch_tform_dir=thumbnail_configs['stitch_tform_dir']
+    mat_mask_dir=thumbnail_configs['mat_mask_dir']
+    feature_match_dir=thumbnail_configs['feature_match_dir']
+    match_dir =thumbnail_configs['match_dir']    
     if 'thumbnail_img_dir' in thumbnail_configs.keys():
         thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
     if driver == 'image':
@@ -389,7 +401,7 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=None, scale=mask_scale,
                                 img_dir=thumbnail_img_dir, **thumbnail_configs)
     time_region.track_time('thumbnail_main.downsample', time.time() - start_downsample)
-    logger.info('finished thumbnail downsample.')
+    #logger.info('finished thumbnail downsample.')
     logging.terminate_logger(*logger_info)
 
 def setup_pair_names(img_dir,root_dir,  compare_distance, imglist=None):
@@ -407,28 +419,34 @@ def setup_pair_names(img_dir,root_dir,  compare_distance, imglist=None):
     pairnames.sort()
     return imglist, bname_list, pairnames
 
-def align_main(pairnames=None, num_workers:int =None):
+def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
     start_alignment = time.time()
+    match_dir = thumbnail_configs['match_dir']
+    manual_dir = thumbnail_configs['manual_dir']
+    mat_mask_dir = thumbnail_configs['mat_mask_dir']
+    thumbnail_mip_lvl=thumbnail_configs['thumbnail_mip_lvl']
+    thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
+    reg_mask_dir = thumbnail_configs['reg_mask_dir']
     os.makedirs(match_dir, exist_ok=True)
     os.makedirs(manual_dir, exist_ok=True)
     compare_distance = thumbnail_configs.pop('compare_distance', 1)
     if not pairnames:
-        imglist, bname_list, pairnames = setup_pair_names(img_dir,root_dir,  compare_distance)
+        imglist, bname_list, pairnames = setup_pair_names(thumbnail_img_dir,root_dir,  compare_distance)
         pairnames = pairnames[arg_indx]
     logger_info = logging.initialize_main_logger(logger_name='thumbnail_align', mp=num_workers>1)
     thumbnail_configs['logger'] = logger_info[0]
     logger= logging.get_logger(logger_info[0])
     resolution = config.DEFAULT_RESOLUTION * (2 ** thumbnail_mip_lvl)
     thumbnail_configs.setdefault('resolution', resolution)
-    thumbnail_configs.setdefault('feature_match_dir', feature_match_dir)
+    #thumbnail_configs.setdefault('feature_match_dir', feature_match_dir)
     region_labels = []
-    material_table_file = config.material_table_file()
+    material_table_file = config.material_table_file(thumbnail_configs['work_dir'])
     material_table = material.MaterialTable.from_json(material_table_file, stream=False)
     for _, mat in material_table:
         if mat.enable_mesh and (mat._stiffness_multiplier > 0.1) and (mat.mask_label is not None):
             region_labels.append(mat.mask_label)
     thumbnail_configs.setdefault('region_labels', region_labels)
-    target_func = partial(align_thumbnail_pairs, image_dir=img_dir, out_dir=match_dir,
+    target_func = partial(align_thumbnail_pairs, image_dir=thumbnail_img_dir, out_dir=match_dir,
                             material_mask_dir=mat_mask_dir, region_mask_dir=reg_mask_dir,
                             **thumbnail_configs)
     if (num_workers == 1) or (len(pairnames) <= 1):
@@ -448,7 +466,7 @@ def align_main(pairnames=None, num_workers:int =None):
             for job in jobs:
                 job.result()
     time_region.track_time('thumbnail_main.alignment', time.time() - start_alignment)
-    logger.info('finished thumbnail alignment.')
+    #logger.info('finished thumbnail alignment.')
     logging.terminate_logger(*logger_info)
 
 if __name__ == '__main__':
@@ -465,12 +483,12 @@ if __name__ == '__main__':
         arg_indx = slice(stp_idx, stt_idx, -step)
     else:
         arg_indx = slice(stt_idx, stp_idx, step)
-    #thumbnail_configs['arg_indx']=arg_indx
+    thumbnail_configs['arg_indx']=arg_indx
     if mode == 'downsample':
         downsample_main(thumbnail_configs)
     elif mode == 'alignment':
         assert num_workers, "num_workers must have a value"
         print("num_workers", num_workers)
-        align_main(num_workers=num_workers)
+        align_main(thumbnail_configs,num_workers=num_workers)
     time_region.log_summary()
 

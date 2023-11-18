@@ -6,7 +6,7 @@ from mpi4py import MPI
 COMM = MPI.COMM_WORLD
 RANK = COMM.Get_rank()
 NUMRANKS = COMM.Get_size()
-RANK=None
+#RANK=None
 class TimeRegion():
     def __init__(self):
         self.region_time = defaultdict(lambda: 0)

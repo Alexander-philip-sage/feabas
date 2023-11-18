@@ -36,12 +36,13 @@ def matching_check_status(coord_dir, match_dir):
 if __name__=='__main__':
     args = parse_args()
     root_dir, generate_settings, stitch_configs, num_cpus, mode, num_workers, nthreads, stitch_dir, coord_dir, mesh_dir, match_dir, render_meta_dir=setup_globals(args)
-    print("stitch_mpi - num_workers",num_workers)
-    print("work_dir", root_dir)
+    #print("stitch_mpi - num_workers",num_workers)
+    #print("work_dir", root_dir)
+    if not RANK:
+        print("mode", mode)
     if mode in ['matching', 'match']:
         if not RANK:
-            print("mode", mode)
-        print(f"stitch_mpi num_workers {stitch_configs['matching']['num_workers']}")
+            print(f"stitch_mpi num_workers {stitch_configs['matching']['num_workers']}")
         coord_list = matching_check_status(coord_dir, match_dir)
         assert len(coord_list) > 0, f"didn't find any txt coord files {coord_dir}"
         sections_per_rank = int(math.ceil(len(coord_list)/NUMRANKS))
@@ -124,15 +125,27 @@ if __name__=='__main__':
     elif mode in ["matching_optimize_render", 'all'] :
         if not RANK:
             print("mode", mode)        
-        coord_list=sorted(glob.glob(os.path.join(coord_dir, "*.txt")))
-        assert len(coord_list) > 0, f"didn't find any txt coord files {coord_dir}"
-        sections_per_rank = int(math.ceil(len(coord_list)/NUMRANKS))
-        if RANK!=(NUMRANKS-1):
-            indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
-        else:
-            indx = slice(RANK*sections_per_rank, len(coord_list), 1)
+            print(f"stitch_mpi matching num_workers {stitch_configs['matching']['num_workers']}")
+            print(f"stitch_mpi rendering num_workers {stitch_configs['rendering']['num_workers']}")
+            print(f"stitch_mpi optimization num_workers {stitch_configs['optimization']['num_workers']}")
+            print(f"num_workers { num_workers}")
+            coord_list=sorted(glob.glob(os.path.join(coord_dir, "*.txt")))
+            print(f"before scatter len(coord_list) {len(coord_list)}")
+        if RANK:
+            coord_list=None
+        coord_list= np.array_split(coord_list, NUMRANKS)
+        coord_list = comm.scatter(coord_list, 0)
+        if not RANK:
+            print(f"after scatter len(coord_list) {len(coord_list)}")
+        assert len(coord_list) > 0, f"didn't find any txt coord files {coord_dir} for rank {RANK} NUMRANKS {NUMRANKS}"
+        #sections_per_rank = int(math.ceil(len(coord_list)/NUMRANKS))
+        #if RANK!=(NUMRANKS-1):
+        #    indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
+        #else:
+        #    indx = slice(RANK*sections_per_rank, len(coord_list), 1)
         #print(RANK,"looking at indx", indx)
-        coord_list = coord_list[indx]
+        #coord_list = coord_list[indx]
+        #assert len(coord_list)>0, f"coord_list empty NUMRANKS {NUMRANKS} sections_per_rank {sections_per_rank} len(coord_list) {len(coord_list)} coord_dir {coord_dir}"
         if args.reverse:
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
@@ -154,4 +167,5 @@ if __name__=='__main__':
         stitch_configs_render.setdefault('meta_dir', render_meta_dir)
         #print(f"image_outdir {image_outdir}")
         render_main(tform_list, image_outdir, **stitch_configs_render)   
+        comm.barrier()
         time_region.log_summary()

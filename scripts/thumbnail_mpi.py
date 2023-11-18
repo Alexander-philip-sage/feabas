@@ -50,11 +50,12 @@ if __name__=='__main__':
                 arg_indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
             else:
                 arg_indx = slice(RANK*sections_per_rank, len(meta_list), 1)
-            #thumbnail_configs['arg_indx']=arg_indx
+            thumbnail_configs['arg_indx']=arg_indx
             downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list[arg_indx])
         elif driver =='neuroglancer_precomputed':
             meta_list, meta_dir = setup_neuroglancer_precomputed(work_dir)
-            downsample_main(thumbnail_configs,meta_list=meta_list)        
+            downsample_main(thumbnail_configs,meta_list=meta_list)     
+        comm.barrier()   
     elif args.mode == 'alignment':
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         print("work_dir", work_dir)
@@ -66,7 +67,8 @@ if __name__=='__main__':
         else:
             arg_indx = slice(RANK*sectionpairs_per_rank, len(pairnames), 1)            
         pairnames = pairnames[arg_indx]
-        align_main(pairnames=pairnames)
+        align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
+        comm.barrier()
         time_region.log_summary()
     elif args.mode =='downsample_precomputed_alignment':
         args.mode = 'downsample'
@@ -82,5 +84,6 @@ if __name__=='__main__':
         compare_distance = thumbnail_configs.pop('compare_distance', 1)
         imglist = [os.path.join(img_dir, x+".png") for x in section_names]
         _, bname_list, pairnames = setup_pair_names(img_dir,work_dir,  compare_distance, imglist=imglist)
-        align_main(pairnames=pairnames)
+        align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
+        comm.barrier()
         time_region.log_summary()

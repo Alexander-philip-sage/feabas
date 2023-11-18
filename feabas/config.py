@@ -70,8 +70,9 @@ def stitch_configs(work_dir=None):
 
 
 @lru_cache(maxsize=1)
-def material_table_file():
-    work_dir = get_work_dir()
+def material_table_file(work_dir=None):
+    if not work_dir:
+        work_dir = get_work_dir()
     mt_file = os.path.join(work_dir, 'configs', 'material_table.json')
     if not os.path.isfile(mt_file):
         mt_file = os.path.join(_default_configuration_folder, 'default_material_table.json')
@@ -148,8 +149,8 @@ def stitch_render_dir(work_dir=None):
 
 
 @lru_cache(maxsize=1)
-def align_render_dir():
-    config_file = align_config_file()
+def align_render_dir(root_dir=None):
+    config_file = align_config_file(root_dir)
     with open(config_file, 'r') as f:        
         align_configs = yaml.safe_load(f)
     render_settings = align_configs.get('rendering', {})
@@ -161,8 +162,8 @@ def align_render_dir():
 
 
 @lru_cache(maxsize=1)
-def tensorstore_render_dir():
-    config_file = align_config_file()
+def tensorstore_render_dir(root_dir=None):
+    config_file = align_config_file(root_dir)
     with open(config_file, 'r') as f:        
         align_configs = yaml.safe_load(f)
     render_settings = align_configs.get('tensorstore_rendering', {})

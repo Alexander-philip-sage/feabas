@@ -156,7 +156,8 @@ def mip_map_one_section(sec_name, img_dir, max_mip, **kwargs):
             updated = True
         num_tiles.append(abs(n_tile))
     if updated:
-        logger.info(f'{sec_name}: number of tiles {num_tiles} | {(time.time()-t0)/60} min')
+        pass
+        #logger.info(f'{sec_name}: number of tiles {num_tiles} | {(time.time()-t0)/60} min')
 
 
 def create_thumbnail(src_dir, outname=None, downsample=4, highpass=True, **kwargs):

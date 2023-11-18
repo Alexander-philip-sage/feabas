@@ -195,7 +195,7 @@ class Stack:
                 if bool(self._link_cache):
                     match_list = list(self._link_cache.keys())
                 else:
-                    raise RuntimeError('no match list found.')
+                    raise RuntimeError(f'no match list found. self._match_dir {self._match_dir}')
         self.match_list = self.filtered_match_list(match_list=match_list)
         self._logger = None
 

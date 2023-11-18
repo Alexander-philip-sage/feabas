@@ -44,12 +44,13 @@ def match_main(coord_list, out_dir, **kwargs):
         outname = os.path.join(out_dir, fname + '.h5')
         if os.path.isfile(outname):
             continue
-        logger.info(f'starting matching for {fname}')
+        #logger.info(f'starting matching for {fname}')
         flag = match_one_section(coordname, outname, **kwargs)
         if flag == 1:
-            logger.info(f'ending for {fname}: {(time.time()-t0)/60} min')
+            pass
+            #logger.info(f'ending for {fname}: {(time.time()-t0)/60} min')
     time_region.track_time("stitch_main.match_main", time.time() - start_match_main)
-    logger.info('finished.')
+    #logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
 
@@ -89,13 +90,13 @@ def optimize_one_section(matchname, outname, **kwargs):
     stitcher.initialize_meshes(mesh_sizes, **mesh_settings)
     discrd =stitcher.optimize_translation(target_gear=feabas.MESH_GEAR_FIXED, **translation_settings)
     dis = stitcher.match_residues()
-    logger.info(f'{bname}: residue after translation {np.nanmean(dis)} | discarded {discrd}')
+    #logger.info(f'{bname}: residue after translation {np.nanmean(dis)} | discarded {discrd}')
     if use_group:
         stitcher.optimize_group_intersection(target_gear=feabas.MESH_GEAR_FIXED, **group_elastic_settings)
         stitcher.optimize_translation(target_gear=feabas.MESH_GEAR_FIXED, **translation_settings)
         cost = stitcher.optimize_elastic(use_groupings=True, target_gear=feabas.MESH_GEAR_FIXED, **group_elastic_settings)
         dis = stitcher.match_residues()
-        logger.info(f'{bname}: residue after grouped relaxation {np.nanmean(dis)} | cost {cost}')
+        #logger.info(f'{bname}: residue after grouped relaxation {np.nanmean(dis)} | cost {cost}')
     cost = stitcher.optimize_elastic(target_gear=feabas.MESH_GEAR_MOVING, **elastic_settings)
     rot, _ = stitcher.normalize_coordinates(**normalize_setting)
     N_conn = stitcher.connect_isolated_subsystem(**disconnected_settings)
@@ -118,7 +119,7 @@ def optimize_one_section(matchname, outname, **kwargs):
     if ncomp > 1:
         finish_str = finish_str + f' | {ncomp1}/{ncomp} components'
         logger.warning(f'\t{bname}: {ncomp} disconnected groups found, among which {ncomp1} have more than one tiles.')
-    logger.info(finish_str)
+    #logger.info(finish_str)
 
 
 def optmization_main(match_list, out_dir, **kwargs):
@@ -146,7 +147,7 @@ def optmization_main(match_list, out_dir, **kwargs):
             for job in jobs:
                 job.result()
     time_region.track_time("stitch_main.optimization_main", time.time() - start_optmization_main)
-    logger.info('finished.')
+    #logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
 
@@ -184,10 +185,10 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
         # delete existing
         out_spec = render_series[1].copy()
         out_spec.update({'open': False, 'create': True, 'delete_existing': True})
-        print("ts.open(out_spec).result()")
-        print("out_spec",out_spec)
+        #print("ts.open(out_spec).result()")
+        #print("out_spec",out_spec)
         store = ts.open(out_spec).result()
-        print("finished ts.open")
+        #finished ts.open")
     if num_workers == 1:
         bboxes, filenames, _ = render_series
         metadata = renderer.render_series_to_file(bboxes, filenames, **render_settings)
@@ -236,7 +237,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
 
 
 def render_main(tform_list, out_dir, **kwargs):
-    print("stitch_main.render_main")
+    #print("stitch_main.render_main")
     start_render_main = time.time()
     logger_info = logging.initialize_main_logger(logger_name='stitch_rendering', mp=False)
     logger = logger_info[0]
@@ -256,7 +257,7 @@ def render_main(tform_list, out_dir, **kwargs):
                 meta_name = os.path.join(sec_outdir, 'metadata.txt')
             if os.path.isfile(meta_name):
                 continue
-            logger.info(f'{sec_name}: start')
+            #logger.info(f'{sec_name}: start')
             if use_tensorstore:
                 #os.makedirs(sec_outdir, exist_ok=True)
                 out_prefix = sec_outdir
@@ -268,7 +269,7 @@ def render_main(tform_list, out_dir, **kwargs):
         except Exception as err:
             logger.error(f'{sec_name}: {err}')
     time_region.track_time('stitch_main.render_main', time.time() - start_render_main)
-    logger.info('finished.')
+    #logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
 def look_for_duplicate_sections(coord_list):
@@ -355,7 +356,7 @@ def setup_globals(args):
     elif mode.startswith('m'):
         mode = 'matching'
     if mode in ["matching_optimize_render", 'all'] :
-        num_workers = stitch_configs.get('num_workers', 1)
+        num_workers = stitch_configs['matching'].get('num_workers', 1)
         if num_workers > num_cpus:
             print("warning: num_workers has been reduced to the num_cpus found", num_cpus)
             num_workers = num_cpus
