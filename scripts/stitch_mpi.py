@@ -132,11 +132,14 @@ if __name__=='__main__':
             print(f"num_workers { num_workers}")
             coord_list=sorted(glob.glob(os.path.join(coord_dir, "*.txt")))
             print(f"before scatter len(coord_list) {len(coord_list)}")
+            coord_list= np.array_split(np.array(coord_list), NUMRANKS,axis=0)
         if RANK:
             coord_list=None
-        coord_list= np.array_split(np.array(coord_list), NUMRANKS,axis=0)
-        if not RANK:
-            print(f"after split before scatter len(coord_list) {len(coord_list)}, len(coord_list[0]) {len(coord_list[0])}")
+        
+        #if not RANK:
+        #    print(f"after split before scatter len(coord_list) {len(coord_list)}")
+        #    for i in range(NUMRANKS):
+        #        print(f"len(coord_list[{i}]) {len(coord_list[i])}")
         coord_list = comm.scatter(coord_list, root=0)
         if not RANK:
             print(f"after scatter len(coord_list) {len(coord_list)}")
