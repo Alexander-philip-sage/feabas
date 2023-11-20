@@ -124,6 +124,7 @@ if __name__=='__main__':
         time_region.log_summary()
     elif mode in ["matching_optimize_render", 'all'] :
         if not RANK:
+            print("work_dir", root_dir)
             print("mode", mode)        
             print(f"stitch_mpi matching num_workers {stitch_configs['matching']['num_workers']}")
             print(f"stitch_mpi rendering num_workers {stitch_configs['rendering']['num_workers']}")
@@ -133,8 +134,10 @@ if __name__=='__main__':
             print(f"before scatter len(coord_list) {len(coord_list)}")
         if RANK:
             coord_list=None
-        coord_list= np.array_split(coord_list, NUMRANKS)
-        coord_list = comm.scatter(coord_list, 0)
+        coord_list= np.array_split(np.array(coord_list), NUMRANKS,axis=0)
+        if not RANK:
+            print(f"after split before scatter len(coord_list) {len(coord_list)}, len(coord_list[0]) {len(coord_list[0])}")
+        coord_list = comm.scatter(coord_list, root=0)
         if not RANK:
             print(f"after scatter len(coord_list) {len(coord_list)}")
         assert len(coord_list) > 0, f"didn't find any txt coord files {coord_dir} for rank {RANK} NUMRANKS {NUMRANKS}"
