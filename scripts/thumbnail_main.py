@@ -20,7 +20,8 @@ def generate_stitched_mipmaps(img_dir, max_mip,meta_list: List[str] =None, **kwa
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
     meta_dir = os.path.join(img_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
-    if not meta_list:
+    if meta_list is None:
+        print("file lookup with glob")
         meta_list = sorted(glob.glob(meta_dir, recursive=True))
         assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
         meta_list = meta_list[arg_indx]
@@ -46,7 +47,8 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[st
     parallel_within_section = kwargs.pop('parallel_within_section', True)
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
-    if not meta_list:
+    if meta_list is None:
+        print("file lookup with glob")
         meta_regex = os.path.join(meta_dir,'*.json')
         meta_list = sorted(glob.glob(meta_regex))
         assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
@@ -72,7 +74,8 @@ def generate_thumbnails(src_dir, out_dir,meta_list=None, **kwargs):
     logger = logging.get_logger(logger_info)
     meta_regex = os.path.join(src_dir, '**', 'metadata.txt')
     assert len(meta_list)>0, f"couldn't find any metadata.txt files in {meta_regex}"
-    if not meta_list:
+    if meta_list is None:
+        print("file lookup with glob")
         meta_list = sorted(glob.glob(meta_regex, recursive=True))
         meta_list = meta_list[arg_indx]
     secnames = [os.path.basename(os.path.dirname(s)) for s in meta_list]
@@ -109,7 +112,8 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, meta_list: List[str]=None,
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = kwargs.pop('logger', None)
     logger = logging.get_logger(logger_info)
-    if not meta_list:
+    if meta_list is None:
+        print("file lookup with glob")
         meta_list = sorted(glob.glob(os.path.join(src_dir, '*.json')))
         meta_list = meta_list[arg_indx]
     target_func = partial(mipmap.create_thumbnail_tensorstore, **kwargs)
@@ -163,8 +167,7 @@ def save_mask_for_one_sections(mesh_file, out_name, scale, **kwargs):
                 common.imwrite(thumb_name, thumb_out)
 
 
-def generate_thumbnail_masks(mesh_dir, out_dir,seclist=None, **kwargs):
-    arg_indx = kwargs.get("arg_indx")
+def generate_thumbnail_masks(out_dir,mesh_dir=None, mesh_list=None,seclist=None, **kwargs):
     num_workers = kwargs.get('num_workers', 1)
     scale = kwargs.get('scale')
     img_dir = kwargs.get('img_dir', None)
@@ -172,11 +175,16 @@ def generate_thumbnail_masks(mesh_dir, out_dir,seclist=None, **kwargs):
     mask_erode = kwargs.get('mask_erode', 0)
     logger_info = kwargs.get('logger', None)
     logger= logging.get_logger(logger_info)
-    mesh_regex = os.path.abspath(os.path.join(mesh_dir, '*.h5'))
-    print("file lookup with glob")
-    mesh_list = sorted(glob.glob(mesh_regex))
+    if (not mesh_list) and mesh_dir:
+        arg_indx = kwargs.get("arg_indx")
+        mesh_regex = os.path.abspath(os.path.join(mesh_dir, '*.h5'))
+        print("file lookup with glob")
+        mesh_list = sorted(glob.glob(mesh_regex))
+        mesh_list = mesh_list[arg_indx]
+    if not mesh_dir:
+        raise ValueError("must pass either mesh list or mesh dir")
     assert len(mesh_list)>0, f"could not find an h5 files in mesh dir: mesh_regex {mesh_regex}"
-    mesh_list = mesh_list[arg_indx]
+    
     target_func = partial(save_mask_for_one_sections, scale=scale, img_dir=img_dir,
                           fillval=fillval, mask_erode=mask_erode)
     os.makedirs(out_dir, exist_ok=True)
@@ -322,6 +330,11 @@ def setup_globals(args):
             stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
             match_dir, feature_match_dir)
 
+def meta_list_to_mesh_list(meta_list, stitch_tform_dir):
+    '''/eagle/BrainImagingML/apsage/feabas/work_dir4/stitched_sections/mip0/W02_Sec110_R1_montaged/metadata.txt'''
+    sec_names = [x.split(os.path.sep)[-2] for x in meta_list]
+    return [os.path.join(stitch_tform_dir, x+".h5") for x in sec_names]
+
 def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     start_downsample=time.time()
     logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=thumbnail_configs.get('num_workers', 1)>1)
@@ -333,7 +346,6 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     stitch_tform_dir=thumbnail_configs['stitch_tform_dir']
     thumbnail_mip_lvl = thumbnail_configs['thumbnail_mip_lvl']
     thumbnail_img_dir=thumbnail_configs['thumbnail_img_dir']
-    stitch_tform_dir=thumbnail_configs['stitch_tform_dir']
     mat_mask_dir=thumbnail_configs['mat_mask_dir']
     feature_match_dir=thumbnail_configs['feature_match_dir']
     match_dir =thumbnail_configs['match_dir']    
@@ -396,22 +408,29 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     else:
         raise NotImplementedError("saving with other file types is not tested")
     mask_scale = 1 / (2 ** thumbnail_mip_lvl)
-    generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, scale=mask_scale,
+    if meta_list is not None:
+        mesh_list = meta_list_to_mesh_list(meta_list, stitch_tform_dir)
+    else:
+        mesh_list=None
+    generate_thumbnail_masks(mat_mask_dir,mesh_dir=stitch_tform_dir, mesh_list=mesh_list, seclist=slist, scale=mask_scale,
                                 img_dir=thumbnail_img_dir, **thumbnail_configs)
-    generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=None, scale=mask_scale,
+    generate_thumbnail_masks( mat_mask_dir, mesh_dir=stitch_tform_dir, mesh_list=mesh_list, seclist=None, scale=mask_scale,
                                 img_dir=thumbnail_img_dir, **thumbnail_configs)
     time_region.track_time('thumbnail_main.downsample', time.time() - start_downsample)
     #logger.info('finished thumbnail downsample.')
     logging.terminate_logger(*logger_info)
 
-def setup_pair_names(img_dir,root_dir,  compare_distance, imglist=None):
+def setup_pair_names(img_dir: str,work_dir: str,  compare_distance: int, imglist: List[str] =None):
     if not imglist:
         img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
         imglist = sorted(glob.glob(img_regex))
         assert len(imglist)>0, f"couldn't find any png files in {img_regex}"
-    section_order_file = os.path.join(root_dir, 'section_order.txt')
+    print("img_dir",img_dir )
+    print("work_dir", work_dir)
+    section_order_file = os.path.join(work_dir, 'section_order.txt')
     imglist = common.rearrange_section_order(imglist, section_order_file)[0]
     bname_list = [os.path.basename(s) for s in imglist]
+    print("bname_list", bname_list)
     pairnames = []
     for stp in range(1, compare_distance+1):
         for k in range(len(bname_list)-stp):
@@ -421,6 +440,7 @@ def setup_pair_names(img_dir,root_dir,  compare_distance, imglist=None):
 
 def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
     start_alignment = time.time()
+    work_dir = thumbnail_configs['work_dir']
     match_dir = thumbnail_configs['match_dir']
     manual_dir = thumbnail_configs['manual_dir']
     mat_mask_dir = thumbnail_configs['mat_mask_dir']
@@ -430,8 +450,8 @@ def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
     os.makedirs(match_dir, exist_ok=True)
     os.makedirs(manual_dir, exist_ok=True)
     compare_distance = thumbnail_configs.pop('compare_distance', 1)
-    if not pairnames:
-        imglist, bname_list, pairnames = setup_pair_names(thumbnail_img_dir,root_dir,  compare_distance)
+    if pairnames is None:
+        imglist, bname_list, pairnames = setup_pair_names(thumbnail_img_dir,work_dir,  compare_distance)
         pairnames = pairnames[arg_indx]
     logger_info = logging.initialize_main_logger(logger_name='thumbnail_align', mp=num_workers>1)
     thumbnail_configs['logger'] = logger_info[0]

@@ -9,6 +9,7 @@ import os
 from collections import defaultdict
 from align_main import setup_configs, render_main,offset_bbox_main
 import glob
+import numpy as np
 import time
 comm = MPI.COMM_WORLD
 RANK = comm.Get_rank()
@@ -24,31 +25,56 @@ if __name__=='__main__':
         mode = config_parts[1]
         mesh_config = config_parts[2]
         os.makedirs(align_config['mesh_dir'], exist_ok=True)
-        match_list = glob.glob(os.path.join(align_config['thumb_match_dir'], '*.h5'))
-        sections_per_rank = int(math.ceil(len(match_list)/NUMRANKS))
-        if RANK!=(NUMRANKS-1):
-            indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
+        if RANK==0:
+            match_list = sorted(glob.glob(os.path.join(align_config['thumb_match_dir'], '*.h5')))
+            if args.reverse:
+                match_list = match_list[::-1]
+            match_list= np.array_split(np.array(match_list), NUMRANKS,axis=0)
         else:
-            indx = slice(RANK*sections_per_rank, len(match_list), 1)
-        match_list = match_list[indx]
+            match_list=None
+        match_list = comm.scatter(match_list, root=0)
+    
+        #sections_per_rank = int(math.ceil(len(match_list)/NUMRANKS))
+        #if RANK!=(NUMRANKS-1):
+        #    indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
+        #else:
+        #    indx = slice(RANK*sections_per_rank, len(match_list), 1)
+        #match_list = match_list[indx]
+        print("align_mpi match_list", match_list)
         generate_mesh_main(align_config,mesh_config,match_list=match_list )
         comm.barrier()
-
+        
         args.mode = 'optimization'
         config_parts = setup_configs(args)
         align_config = config_parts[0]
         mode = config_parts[1]
         optimization_config = config_parts[2]
         if RANK==0:
+            if not os.path.exists(align_config['tform_dir']):
+                os.mkdir(align_config['tform_dir'])
             print("only one rank is doing the optimization")
             optimize_main(None, align_config, optimization_config)
         comm.barrier()
-
         args.mode = 'render'
+        start_render_configs =time.time() 
         config_parts = setup_configs(args)
         align_config = config_parts[0]
         mode = config_parts[1]
         render_config = config_parts[2]
+        if RANK==0:
+            tform_list_all =sorted( glob.glob(os.path.join(align_config['tform_dir'],"*.h5")))
+            tform_list = np.array_split(np.array(match_list), NUMRANKS,axis=0)
+            print("align_config['work_dir']",align_config['work_dir'])
+            stitch_render_config = config.stitch_configs(align_config['work_dir']).get('rendering', {})
+            if stitch_render_config['out_dir'] is None:
+                stitch_render_config['out_dir'] = os.path.join(align_config['work_dir'], 'stitched_sections')
+        else:
+            stitch_render_config=None
+            tform_list = None
+        tform_list = comm.scatter(tform_list , 0)
+        stitch_render_config=comm.bcast(stitch_render_config,0)
+        print("align_mpi stitch_render_config['out_dir']",stitch_render_config['out_dir'])
+        time_region.track_time('align_mpi.start_render_configs', time.time() - start_render_configs)
         start_rendering =time.time() 
         if align_config.pop('offset_bbox', True):
             offset_name = os.path.join(align_config['tform_dir'], 'offset.txt')
@@ -56,11 +82,11 @@ if __name__=='__main__':
                 time.sleep(0.1 * (1 + (args.start % args.step))) # avoid racing
                 offset_bbox_main(align_config)
         os.makedirs(align_config['render_dir'], exist_ok=True)
-        tform_list = sorted(glob.glob(os.path.join(align_config['tform_dir'], '*.h5')))
-        tform_list = tform_list[indx]
+        #tform_list = sorted(glob.glob(os.path.join(align_config['tform_dir'], '*.h5')))
+        
+        
+        #tform_list = tform_list[indx]
         assert len(match_list)==len(tform_list),f"len(match_list) {len(match_list)}  len(tform_list)  {len(tform_list)}"
-        if args.reverse:
-            tform_list = tform_list[::-1]
         z_prefix = defaultdict(lambda: '')
         if align_config.pop('prefix_z_number', True):
             seclist = sorted(glob.glob(os.path.join(align_config['mesh_dir'], '*.h5')))
@@ -69,6 +95,7 @@ if __name__=='__main__':
             digit_num = math.ceil(math.log10(len(seclist)))
             z_prefix.update({os.path.basename(s): str(k).rjust(digit_num, '0')+'_'
                              for k, s in zip(z_indx, seclist)})
-        render_main(tform_list, render_config, align_config['tform_dir'], z_prefix)
+        render_main(tform_list, render_config, align_config['tform_dir'], z_prefix, stitch_render_config=stitch_render_config)
         comm.barrier()
-        time_region.track_time('align_main.rendering', time.time() - start_rendering)
+        time_region.track_time('align_mpi.rendering', time.time() - start_rendering)
+        time_region.log_summary()

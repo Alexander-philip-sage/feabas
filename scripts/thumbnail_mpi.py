@@ -30,6 +30,42 @@ def setup_neuroglancer_precomputed(work_dir):
     else:
         arg_indx = slice(RANK*sections_per_rank, len(meta_list), 1)
     return meta_list[arg_indx], meta_dir
+
+def mpi_downsample(thumbnail_configs,work_dir ):
+    min_mip = thumbnail_configs.get('min_mip', 0)
+    stitched_dir = config.stitch_render_dir(work_dir)
+    meta_dir = os.path.join(stitched_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
+    if RANK==0:
+        meta_list = sorted(glob.glob(meta_dir, recursive=True))
+        #print("meta_list", meta_list)
+        meta_list= np.array_split(np.array(meta_list), NUMRANKS,axis=0)
+    else:
+        meta_list=None
+    meta_list = comm.scatter(meta_list, root=0)
+    assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
+    if not RANK:
+        print(f"after scatter len(meta_list) {len(meta_list)}")
+    downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list)
+    comm.barrier()
+
+def mpi_alignment(thumbnail_configs,num_workers, img_dir):
+    compare_distance = thumbnail_configs.pop('compare_distance', 1)
+    if RANK==0:
+        print("work_dir", work_dir)
+        imglist, bname_list, pairnames = setup_pair_names(img_dir,work_dir,  compare_distance)
+        print("len(pairnames) ", len(pairnames))
+        pairnames= np.array_split(np.array(pairnames), NUMRANKS,axis=0)
+        print("len(pairnames) after np.array_split", len(pairnames))
+    else:
+        pairnames=None
+    pairnames = comm.scatter(pairnames, root=0)
+    comm.barrier()
+    if pairnames is None:
+        raise Exception("pairnames shouldn't be None. Are there more ranks than section pairs?")
+    align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
+    comm.barrier()
+    time_region.log_summary()
+
 if __name__=='__main__':
     args = parse_args()
     num_workers=None
@@ -39,37 +75,15 @@ if __name__=='__main__':
         print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
-        if driver == 'image':        
-            min_mip = thumbnail_configs.get('min_mip', 0)
-            stitched_dir = config.stitch_render_dir(work_dir)
-            meta_dir = os.path.join(stitched_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
-            meta_list = sorted(glob.glob(meta_dir, recursive=True))
-            assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
-            sections_per_rank = int(math.ceil(len(meta_list)/NUMRANKS))
-            if RANK!=(NUMRANKS-1):
-                arg_indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
-            else:
-                arg_indx = slice(RANK*sections_per_rank, len(meta_list), 1)
-            thumbnail_configs['arg_indx']=arg_indx
-            downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list[arg_indx])
+        if driver == 'image':      
+            mpi_downsample(thumbnail_configs,work_dir )  
         elif driver =='neuroglancer_precomputed':
             meta_list, meta_dir = setup_neuroglancer_precomputed(work_dir)
             downsample_main(thumbnail_configs,meta_list=meta_list)     
         comm.barrier()   
     elif args.mode == 'alignment':
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
-        print("work_dir", work_dir)
-        compare_distance = thumbnail_configs.pop('compare_distance', 1)
-        imglist, bname_list, pairnames = setup_pair_names(img_dir,work_dir,  compare_distance)
-        sectionpairs_per_rank = int(math.ceil(len(pairnames)/NUMRANKS))
-        if RANK!=(NUMRANKS-1):
-            arg_indx = slice(RANK*sectionpairs_per_rank, (RANK+1)*sectionpairs_per_rank, 1)
-        else:
-            arg_indx = slice(RANK*sectionpairs_per_rank, len(pairnames), 1)            
-        pairnames = pairnames[arg_indx]
-        align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
-        comm.barrier()
-        time_region.log_summary()
+        mpi_alignment(thumbnail_configs,num_workers, img_dir)
     elif args.mode =='downsample_precomputed_alignment':
         args.mode = 'downsample'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
@@ -87,3 +101,15 @@ if __name__=='__main__':
         align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
         comm.barrier()
         time_region.log_summary()
+    elif args.mode=='downsample_alignment':
+        args.mode = 'downsample'
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        if not RANK:
+            print("work_dir", work_dir)
+        stitch_conf = config.stitch_configs(work_dir)['rendering']
+        driver = stitch_conf.get('driver', 'image')
+        assert driver=='image'
+        mpi_downsample(thumbnail_configs,work_dir )
+        args.mode = 'alignment'
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        mpi_alignment(thumbnail_configs,num_workers, img_dir)

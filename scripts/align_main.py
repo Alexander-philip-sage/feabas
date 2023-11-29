@@ -83,7 +83,8 @@ def generate_mesh_main(align_config, mesh_config, match_list=None):
     thumbnail_mip_lvl = align_config.get('thumbnail_mip_level', 6)
     thumbnail_resolution = config.DEFAULT_RESOLUTION * (2 ** thumbnail_mip_lvl)
     thumbnail_mask_dir = os.path.join(align_config['thumbnail_dir'], 'material_masks')
-    if not match_list:
+    if  match_list is None:
+        print("file lookup with glob")
         match_list = glob.glob(os.path.join(align_config['thumb_match_dir'], '*.h5'))
         assert len(match_list)>0, f"must find more than one match in {os.path.abspath(align_config['thumb_match_dir'])}"
     match_names = [os.path.basename(s).replace('.h5', '').split(align_config['match_name_delimiter']) for s in match_list]
@@ -125,7 +126,7 @@ def generate_mesh_main(align_config, mesh_config, match_list=None):
 
 
 def match_main(align_config,match_config, match_list):
-    stitch_config = config.stitch_configs().get('rendering', {})
+    stitch_config = config.stitch_configs(align_config['work_dir']).get('rendering', {})
     loader_config = {key: val for key, val in stitch_config.items() if key in ('pattern', 'one_based', 'fillval')}
     working_mip_level = align_config.get('working_mip_level', 2)
     stitch_render_driver = config.stitch_configs().get('rendering', {}).get('driver', 'image')
@@ -176,10 +177,11 @@ def optimize_main(section_list,align_config,  optimization_config):
     stack_config.setdefault('section_order_file', os.path.join(align_config['work_dir'], 'section_order.txt'))
     slide_window['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
-    print("optimize_main: section_list", section_list)
+    #print("optimize_main: section_list before Stack object created", section_list)
     stk = Stack(section_list=section_list, mesh_dir=align_config['mesh_dir'], match_dir=align_config['match_dir'], 
                 mesh_out_dir=align_config['tform_dir'], **stack_config)
     section_list = stk.section_list
+    #print("optimize_main: section_list after Stack object created", section_list)
     stk.update_lock_flags({s: os.path.isfile(os.path.join(align_config['tform_dir'], s + '.h5')) for s in section_list})
     locked_flags = stk.locked_array
     logger.info(f'{locked_flags.size} images| {np.sum(locked_flags)} references')
@@ -207,6 +209,7 @@ def offset_bbox_main(align_config):
     logger_info = logging.initialize_main_logger(logger_name='offset_bbox', mp=False)
     logger = logging.get_logger(logger_info[0])
     outname = os.path.join(align_config['tform_dir'], 'offset.txt')
+    print("file lookup with glob")
     tform_list = sorted(glob.glob(os.path.join(align_config['tform_dir'], '*.h5')))
     if os.path.isfile(outname) or (len(tform_list) == 0):
         return
@@ -235,11 +238,13 @@ def offset_bbox_main(align_config):
     logging.terminate_logger(*logger_info)
 
 
-def render_one_section(h5name, z_prefix='', **kwargs):
+def render_one_section(h5name, z_prefix='', stitch_render_config:dict =None, **kwargs):
     logger_info = kwargs.pop('logger', None)
     logger = logging.get_logger(logger_info)
     mip_level = kwargs.pop('mip_level', 0)
     offset = kwargs.pop('offset', None)
+    render_dir = kwargs.pop('render_dir', None)
+    work_dir = kwargs.pop('work_dir', None)
     secname = os.path.splitext(os.path.basename(h5name))[0]
     outdir = os.path.join(render_dir, 'mip'+str(mip_level), z_prefix+secname)
     resolution = config.DEFAULT_RESOLUTION * (2 ** mip_level)
@@ -248,10 +253,15 @@ def render_one_section(h5name, z_prefix='', **kwargs):
         return None
     os.makedirs(outdir, exist_ok=True)
     t0 = time.time()
-    stitch_config = config.stitch_configs().get('rendering', {})
+    if stitch_render_config is None:
+        stitch_render_config = config.stitch_configs(work_dir).get('rendering', {})
+        stitch_render_dir = config.stitch_render_dir()
+    else:
+        stitch_render_dir =stitch_render_config['out_dir']
+        print("render_one_section stitch_render_dir",stitch_render_dir)
     loader_config = kwargs.pop('loader_config', {}).copy()
-    loader_config.update({key: val for key, val in stitch_config.items() if key in ('pattern', 'one_based', 'fillval')})
-    stitch_render_dir = config.stitch_render_dir()
+    loader_config.update({key: val for key, val in stitch_render_config.items() if key in ('pattern', 'one_based', 'fillval')})
+    
     stitched_image_dir = os.path.join(stitch_render_dir, 'mip'+str(mip_level))
     loader_config['resolution'] = resolution
     loader = get_image_loader(os.path.join(stitched_image_dir, secname), **loader_config)
@@ -272,8 +282,9 @@ def render_one_section(h5name, z_prefix='', **kwargs):
     return len(rendered)
 
 
-def render_main(tform_list, filename_config, tform_dir, z_prefix=None):
+def render_main(tform_list, filename_config, tform_dir, z_prefix=None, stitch_render_config:dict =None):
     logger_info = logging.initialize_main_logger(logger_name='align_render', mp=False)
+    print("render_main stitch_render_config['out_dir']",stitch_render_config['out_dir'])
     filename_config['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
     num_workers = filename_config.get('num_workers', 1)
@@ -293,7 +304,7 @@ def render_main(tform_list, filename_config, tform_dir, z_prefix=None):
         z_prefix = {}
     for tname in tform_list:
         z = z_prefix.get(os.path.basename(tname), '')
-        render_one_section(tname, z_prefix=z, offset=offset, **filename_config)
+        render_one_section(tname, z_prefix=z, offset=offset, stitch_render_config=stitch_render_config, **filename_config)
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
@@ -306,6 +317,7 @@ def generate_aligned_mipmaps(render_dir, max_mip, meta_list=None, **kwargs):
     kwargs['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
     if meta_list is None:
+        print("file lookup with glob")
         meta_list = sorted(glob.glob(os.path.join(render_dir, 'mip'+str(min_mip), '**', 'metadata.txt'), recursive=True))
     secnames = [os.path.basename(os.path.dirname(s)) for s in meta_list]
     if parallel_within_section or (num_workers == 1):
@@ -435,6 +447,7 @@ def setup_configs(args):
     align_config['work_dir'] = work_dir
     align_config['thumbnail_mip_level'] = thumbnail_configs.get('thumbnail_mip_level', 6)
     if args.mode.lower().startswith('r'):
+        render_config['render_dir']=align_config['render_dir']
         return align_config, mode, render_config
     elif args.mode.lower().startswith('o'):
         return align_config, mode, optimization_config
@@ -459,6 +472,7 @@ def align_switchboard(mode, align_config, config_parts):
         start_matching =time.time()
         os.makedirs(align_config['match_dir'], exist_ok=True)
         generate_mesh_main(align_config,mesh_config)
+        print("file lookup with glob")
         match_list = sorted(glob.glob(os.path.join(align_config['thumb_match_dir'], '*.h5')))
         assert len(match_list)>0, f"must find more than one match in {os.path.abspath(align_config['thumb_match_dir'])}"
         match_list = match_list[indx]
@@ -480,12 +494,14 @@ def align_switchboard(mode, align_config, config_parts):
                 time.sleep(0.1 * (1 + (args.start % args.step))) # avoid racing
                 offset_bbox_main(align_config)
         os.makedirs(align_config['render_dir'], exist_ok=True)
+        print("file lookup with glob")
         tform_list = sorted(glob.glob(os.path.join(align_config['tform_dir'], '*.h5')))
         tform_list = tform_list[indx]
         if args.reverse:
             tform_list = tform_list[::-1]
         z_prefix = defaultdict(lambda: '')
         if align_config.pop('prefix_z_number', True):
+            print("file lookup with glob")
             seclist = sorted(glob.glob(os.path.join(align_config['mesh_dir'], '*.h5')))
             section_order_file = os.path.join(align_config['work_dir'], 'section_order.txt')
             seclist, z_indx = common.rearrange_section_order(seclist, section_order_file)
@@ -499,6 +515,7 @@ def align_switchboard(mode, align_config, config_parts):
         min_mip = filename_config['min_mip']
         start_downsample = time.time()
         max_mip = align_config.pop('max_mip', 8)
+        print("file lookup with glob")
         meta_list = sorted(glob.glob(os.path.join(align_config['render_dir'], 'mip'+str(min_mip), '**', 'metadata.txt'), recursive=True))
         meta_list = meta_list[indx]
         if args.reverse:
@@ -517,6 +534,7 @@ def align_switchboard(mode, align_config, config_parts):
             tensorstore_render_dir = tensor_config['tensorstore_render_dir'] + '0/'
         elif driver == 'n5':
             tensorstore_render_dir = tensor_config['tensorstore_render_dir'] + 's0/'
+        print("file lookup with glob")
         tform_list = sorted(glob.glob(os.path.join(tensor_config['tform_dir'], '*.h5')))
         section_order_file = os.path.join(tensor_config['work_dir'], 'section_order.txt')
         tform_list, z_indx = common.rearrange_section_order(tform_list, section_order_file)
