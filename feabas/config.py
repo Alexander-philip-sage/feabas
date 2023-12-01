@@ -50,10 +50,10 @@ def get_log_dir():
 def stitch_config_file(work_dir=None):
     if work_dir is None:
         work_dir = get_work_dir()
-    else:
-        print("stitch_config_file: passed in work_dir", work_dir)
+    #else:
+        #print("stitch_config_file: passed in work_dir", work_dir)
     config_file = os.path.join(work_dir, 'configs', 'stitching_configs.yaml')
-    print("stitch_config_file: config_file", config_file)
+    #print("stitch_config_file: config_file", config_file)
     if not os.path.isfile(config_file):
         print("couldn't find file at",config_file )
         config_file = os.path.join(_default_configuration_folder, 'default_stitching_configs.yaml')
@@ -67,7 +67,7 @@ def stitch_configs(work_dir=None):
         with open(stitch_config_file(), 'r') as f:
             conf = yaml.safe_load(f)
     else:
-        print("passed in work_dir", work_dir)
+        #print("passed in work_dir", work_dir)
         with open(stitch_config_file(work_dir), 'r') as f:
             conf = yaml.safe_load(f)        
     return conf
@@ -153,16 +153,17 @@ def stitch_render_dir(work_dir=None):
 
 
 @lru_cache(maxsize=1)
-def align_render_dir(root_dir=None):
-    config_file = align_config_file(root_dir)
+def align_render_dir(work_dir=None):
+    config_file = align_config_file(work_dir)
     with open(config_file, 'r') as f:        
         align_configs = yaml.safe_load(f)
     render_settings = align_configs.get('rendering', {})
-    outdir = render_settings.get('out_dir', None)
-    if outdir is None:
-        work_dir = get_work_dir()
-        outdir = os.path.join(work_dir, 'aligned_stack')
-    return outdir
+    render_dir = render_settings.get('out_dir', None)
+    if render_dir is None:
+        if work_dir is None:
+            work_dir = get_work_dir()
+        render_dir = os.path.join(work_dir, 'aligned_stack')
+    return render_dir
 
 
 @lru_cache(maxsize=1)

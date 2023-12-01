@@ -10,7 +10,7 @@ from feabas.time_region import time_region
 from feabas import config, logging
 from feabas import mipmap, common, material
 from feabas.mipmap import mip_map_one_section
-from thumbnail_main import setup_globals, parse_args, downsample_main, setup_pair_names, align_main
+from thumbnail_main import setup_globals, setup_pairnames, setup_bnames, parse_args, downsample_main, setup_pair_names, align_main
 import numpy as np
 
 from mpi4py import MPI
@@ -43,25 +43,26 @@ def mpi_downsample(thumbnail_configs,work_dir ):
         meta_list=None
     meta_list = comm.scatter(meta_list, root=0)
     assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
-    if not RANK:
+    if  RANK==0:
         print(f"after scatter len(meta_list) {len(meta_list)}")
     downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list)
     comm.barrier()
 
-def mpi_alignment(thumbnail_configs,num_workers, img_dir):
+def mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir):
     compare_distance = thumbnail_configs.pop('compare_distance', 1)
     if RANK==0:
         print("work_dir", work_dir)
-        imglist, bname_list, pairnames = setup_pair_names(img_dir,work_dir,  compare_distance)
-        print("len(pairnames) ", len(pairnames))
-        pairnames= np.array_split(np.array(pairnames), NUMRANKS,axis=0)
-        print("len(pairnames) after np.array_split", len(pairnames))
+        _, bname_list = setup_bnames(thumbnail_img_dir, work_dir)
     else:
-        pairnames=None
-    pairnames = comm.scatter(pairnames, root=0)
-    comm.barrier()
+        bname_list=None
+    bname_list = comm.bcast(bname_list, root=0)
+    assert len(bname_list)>0, f"rank {RANK}: bname list must be greater than 0"    
+    pairnames = setup_pairnames(bname_list, compare_distance)
+    pairnames = np.array_split(np.array(pairnames), NUMRANKS, axis=0)[RANK]
     if pairnames is None:
         raise Exception("pairnames shouldn't be None. Are there more ranks than section pairs?")
+    else:
+        print("rank", RANK, "pairnames", pairnames)
     align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
     comm.barrier()
     time_region.log_summary()
@@ -71,7 +72,7 @@ if __name__=='__main__':
     num_workers=None
     arg_indx=None
     if args.mode=='downsample':
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
@@ -82,11 +83,11 @@ if __name__=='__main__':
             downsample_main(thumbnail_configs,meta_list=meta_list)     
         comm.barrier()   
     elif args.mode == 'alignment':
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
-        mpi_alignment(thumbnail_configs,num_workers, img_dir)
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir)
     elif args.mode =='downsample_precomputed_alignment':
         args.mode = 'downsample'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
@@ -94,22 +95,23 @@ if __name__=='__main__':
         section_names = sorted([os.path.basename(x).split(".")[0] for x in meta_list])
         downsample_main(thumbnail_configs, meta_list=meta_list)     
         args.mode = 'alignment'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         compare_distance = thumbnail_configs.pop('compare_distance', 1)
-        imglist = [os.path.join(img_dir, x+".png") for x in section_names]
-        _, bname_list, pairnames = setup_pair_names(img_dir,work_dir,  compare_distance, imglist=imglist)
+        imglist = [os.path.join(thumbnail_img_dir, x+".png") for x in section_names]
+        _, bname_list, pairnames = setup_pair_names(thumbnail_img_dir,work_dir,  compare_distance, imglist=imglist)
         align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
         comm.barrier()
         time_region.log_summary()
     elif args.mode=='downsample_alignment':
+        raise Exception("this only works on one rank for unknown reasons. call downsample and alignment seperately. fails in mpi_alignment's scatter")
         args.mode = 'downsample'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
-        if not RANK:
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        if RANK==0:
             print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
         assert driver=='image'
         mpi_downsample(thumbnail_configs,work_dir )
         args.mode = 'alignment'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
-        mpi_alignment(thumbnail_configs,num_workers, img_dir)
+        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir)

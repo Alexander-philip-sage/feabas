@@ -104,7 +104,7 @@ def generate_thumbnails(src_dir, out_dir,meta_list=None, **kwargs):
                 jobs.append(job)
             for job in jobs:
                 job.result()
-        logger.info('thumbnails generated.')
+        #logger.info('thumbnails generated.')
     return updated
 
 
@@ -211,7 +211,7 @@ def generate_thumbnail_masks(out_dir,mesh_dir=None, mesh_list=None,seclist=None,
                 jobs.append(job)
             for job in jobs:
                 job.result()
-        logger.info('thumbnail masks generated.')
+        #logger.info('thumbnail masks generated.')
 
 
 def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
@@ -419,8 +419,7 @@ def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
     time_region.track_time('thumbnail_main.downsample', time.time() - start_downsample)
     #logger.info('finished thumbnail downsample.')
     logging.terminate_logger(*logger_info)
-
-def setup_pair_names(img_dir: str,work_dir: str,  compare_distance: int, imglist: List[str] =None):
+def setup_bnames(img_dir: str,work_dir: str, imglist: List[str] =None):
     if not imglist:
         img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
         imglist = sorted(glob.glob(img_regex))
@@ -430,12 +429,18 @@ def setup_pair_names(img_dir: str,work_dir: str,  compare_distance: int, imglist
     section_order_file = os.path.join(work_dir, 'section_order.txt')
     imglist = common.rearrange_section_order(imglist, section_order_file)[0]
     bname_list = [os.path.basename(s) for s in imglist]
-    print("bname_list", bname_list)
+    return imglist, bname_list
+def setup_pairnames(bname_list: List[str], compare_distance: int):
     pairnames = []
     for stp in range(1, compare_distance+1):
         for k in range(len(bname_list)-stp):
             pairnames.append((bname_list[k], bname_list[k+stp]))
     pairnames.sort()
+    return pairnames
+def setup_pair_names(img_dir: str,work_dir: str,  compare_distance: int, imglist: List[str] =None):
+    imglist, bname_list = setup_bnames(img_dir, work_dir, imglist=imglist)
+    print("bname_list", bname_list)
+    pairnames = setup_pairnames(bname_list, compare_distance)
     return imglist, bname_list, pairnames
 
 def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
@@ -508,7 +513,7 @@ if __name__ == '__main__':
         downsample_main(thumbnail_configs)
     elif mode == 'alignment':
         assert num_workers, "num_workers must have a value"
-        print("num_workers", num_workers)
+        #print("num_workers", num_workers)
         align_main(thumbnail_configs,num_workers=num_workers)
     time_region.log_summary()
 

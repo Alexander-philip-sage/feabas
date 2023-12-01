@@ -8,6 +8,7 @@ import math
 import os
 import time
 import gc
+from typing import List
 from feabas.time_region import time_region
 from feabas import config, logging
 import feabas.constant as const
@@ -29,7 +30,7 @@ def generate_mesh_from_mask(mask_names, outname, **kwargs):
     simplify_tol = kwargs.get('simplify_tol', 2)
     area_thresh = kwargs.get('area_thresh', 0)
     logger_info = kwargs.pop('logger', None)
-    logger = logging.get_logger(logger_info)
+    #logger = logging.get_logger(logger_info)
     if isinstance(simplify_tol, dict):
         region_tols = defaultdict(lambda: 0.1)
         region_tols.update(simplify_tol)
@@ -59,7 +60,7 @@ def generate_mesh_from_mask(mask_names, outname, **kwargs):
         break
     secname = os.path.splitext(os.path.basename(outname))[0]
     if loader is None:
-        logger.warning(str(secname) + " mask does not exist")
+        #logger.warning(str(secname) + " mask does not exist")
         return
     mesh_size = mesh_size * config.DEFAULT_RESOLUTION / src_resolution
     G = spatial.Geometry.from_image_mosaic(loader, material_table=material_table, resolution=src_resolution)
@@ -74,12 +75,12 @@ def generate_mesh_from_mask(mask_names, outname, **kwargs):
     M.save_to_h5(outname, save_material=True, override_dict={'name': mshname})
 
 
-def generate_mesh_main(align_config, mesh_config, match_list=None):
+def generate_mesh_main(align_config: dict, mesh_config: dict, match_list: List[str]=None, secnames: List[str] =None):
     num_workers = mesh_config['num_workers']
     start_generate_mesh_main=time.time()
-    logger_info = logging.initialize_main_logger(logger_name='mesh_generation', mp=num_workers>1)
-    mesh_config['logger'] = logger_info[0]
-    logger = logging.get_logger(logger_info[0])
+    #logger_info = logging.initialize_main_logger(logger_name='mesh_generation', mp=num_workers>1)
+    #mesh_config['logger'] = logger_info[0]
+    #logger = logging.get_logger(logger_info[0])
     thumbnail_mip_lvl = align_config.get('thumbnail_mip_level', 6)
     thumbnail_resolution = config.DEFAULT_RESOLUTION * (2 ** thumbnail_mip_lvl)
     thumbnail_mask_dir = os.path.join(align_config['thumbnail_dir'], 'material_masks')
@@ -87,8 +88,9 @@ def generate_mesh_main(align_config, mesh_config, match_list=None):
         print("file lookup with glob")
         match_list = glob.glob(os.path.join(align_config['thumb_match_dir'], '*.h5'))
         assert len(match_list)>0, f"must find more than one match in {os.path.abspath(align_config['thumb_match_dir'])}"
-    match_names = [os.path.basename(s).replace('.h5', '').split(align_config['match_name_delimiter']) for s in match_list]
-    secnames = set([s for pp in match_names for s in pp])
+    if secnames is None:
+        match_names = [os.path.basename(s).replace('.h5', '').split(align_config['match_name_delimiter']) for s in match_list]
+        secnames = set([s for pp in match_names for s in pp])
     alt_mask_dir = mesh_config.get('mask_dir', None)
     alt_mask_mip_level = mesh_config.get('mask_mip_level', 4)
     alt_mask_resolution = config.DEFAULT_RESOLUTION * (2 ** alt_mask_mip_level)
@@ -121,8 +123,8 @@ def generate_mesh_main(align_config, mesh_config, match_list=None):
             for job in jobs:
                 job.result()
     time_region.track_time('align_main.generate_mesh_main', time.time() - start_generate_mesh_main)                
-    logger.info('meshes generated.')
-    logging.terminate_logger(*logger_info)
+    #logger.info('meshes generated.')
+    #logging.terminate_logger(*logger_info)
 
 
 def match_main(align_config,match_config, match_list):
@@ -202,15 +204,16 @@ def optimize_main(section_list,align_config,  optimization_config):
             val = cost[key]
             f.write(f'{key}, {val[0]}, {val[1]}\n')
     time_region.track_time('align_main.optimize_main', time.time() - start_optimize_main)
-    logger.info('finished')
+    #logger.info('finished')
     logging.terminate_logger(*logger_info)
 
-def offset_bbox_main(align_config):
+def offset_bbox_main(align_config,tform_list: List[str]=None):
     logger_info = logging.initialize_main_logger(logger_name='offset_bbox', mp=False)
     logger = logging.get_logger(logger_info[0])
     outname = os.path.join(align_config['tform_dir'], 'offset.txt')
-    print("file lookup with glob")
-    tform_list = sorted(glob.glob(os.path.join(align_config['tform_dir'], '*.h5')))
+    if tform_list is None:
+        print("file lookup with glob")
+        tform_list = sorted(glob.glob(os.path.join(align_config['tform_dir'], '*.h5')))
     if os.path.isfile(outname) or (len(tform_list) == 0):
         return
     secnames = [os.path.splitext(os.path.basename(s))[0] for s in tform_list]
@@ -244,6 +247,7 @@ def render_one_section(h5name, z_prefix='', stitch_render_config:dict =None, **k
     mip_level = kwargs.pop('mip_level', 0)
     offset = kwargs.pop('offset', None)
     render_dir = kwargs.pop('render_dir', None)
+    
     work_dir = kwargs.pop('work_dir', None)
     secname = os.path.splitext(os.path.basename(h5name))[0]
     outdir = os.path.join(render_dir, 'mip'+str(mip_level), z_prefix+secname)
@@ -258,19 +262,21 @@ def render_one_section(h5name, z_prefix='', stitch_render_config:dict =None, **k
         stitch_render_dir = config.stitch_render_dir()
     else:
         stitch_render_dir =stitch_render_config['out_dir']
-        print("render_one_section stitch_render_dir",stitch_render_dir)
+        #print("render_one_section stitch_render_dir",stitch_render_dir)
     loader_config = kwargs.pop('loader_config', {}).copy()
     loader_config.update({key: val for key, val in stitch_render_config.items() if key in ('pattern', 'one_based', 'fillval')})
     
     stitched_image_dir = os.path.join(stitch_render_dir, 'mip'+str(mip_level))
     loader_config['resolution'] = resolution
     loader = get_image_loader(os.path.join(stitched_image_dir, secname), **loader_config)
+    #print("render_one_section h5name", h5name)
     M = Mesh.from_h5(h5name)
     M.change_resolution(resolution)
     if offset is not None:
         M.apply_translation(offset * config.DEFAULT_RESOLUTION/resolution, gear=const.MESH_GEAR_MOVING)
     os.makedirs(outdir, exist_ok=True)
     prefix = os.path.join(outdir, secname)
+    #print("prefix for render_whole mesh", prefix)
     rendered = render_whole_mesh(M, loader, prefix, **kwargs)
     fnames = sorted(list(rendered.keys()))
     bboxes = []
@@ -282,16 +288,17 @@ def render_one_section(h5name, z_prefix='', stitch_render_config:dict =None, **k
     return len(rendered)
 
 
-def render_main(tform_list, filename_config, tform_dir, z_prefix=None, stitch_render_config:dict =None):
+def render_main(tform_list, render_config, tform_dir, z_prefix=None, stitch_render_config:dict =None):
     logger_info = logging.initialize_main_logger(logger_name='align_render', mp=False)
-    print("render_main stitch_render_config['out_dir']",stitch_render_config['out_dir'])
-    filename_config['logger'] = logger_info[0]
+    #print("render_main stitch_render_config['out_dir']",stitch_render_config['out_dir'])
+    render_config['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
-    num_workers = filename_config.get('num_workers', 1)
-    cache_size = filename_config.get('loader_config', {}).get('cache_size', None)
+    num_workers = render_config.get('num_workers', 1)
+    cache_size = render_config.get('loader_config', {}).get('cache_size', None)
+    #print("render_main cache_size", cache_size)
     if (cache_size is not None) and (num_workers > 1):
-        filename_config.setdefault('loader_config', {})
-        filename_config['loader_config'].setdefault('cache_size', cache_size // num_workers)
+        render_config.setdefault('loader_config', {})
+        render_config['loader_config'].setdefault('cache_size', cache_size // num_workers)
     offset_name = os.path.join(tform_dir, 'offset.txt')
     if os.path.isfile(offset_name):
         with open(offset_name, 'r') as f:
@@ -304,8 +311,8 @@ def render_main(tform_list, filename_config, tform_dir, z_prefix=None, stitch_re
         z_prefix = {}
     for tname in tform_list:
         z = z_prefix.get(os.path.basename(tname), '')
-        render_one_section(tname, z_prefix=z, offset=offset, stitch_render_config=stitch_render_config, **filename_config)
-    logger.info('finished')
+        render_one_section(tname, z_prefix=z, offset=offset, stitch_render_config=stitch_render_config, **render_config)
+    #logger.info('finished')
     logging.terminate_logger(*logger_info)
 
 
@@ -333,7 +340,7 @@ def generate_aligned_mipmaps(render_dir, max_mip, meta_list=None, **kwargs):
                 jobs.append(job)
             for job in jobs:
                 job.result()
-    logger.info('mipmapping generated.')
+    #logger.info('mipmapping generated.')
     logging.terminate_logger(*logger_info)
 
 
@@ -430,6 +437,7 @@ def setup_configs(args):
     thumbnail_dir = os.path.join(work_dir, 'thumbnail_align')
     thumb_match_dir = os.path.join(thumbnail_dir, 'matches')
     render_dir = config.align_render_dir(args.work_dir)
+    
     tensorstore_render_dir = config.tensorstore_render_dir(args.work_dir)
     ts_flag_dir = os.path.join(align_dir, 'ts_spec')
     thumbnail_configs = config.thumbnail_configs(args.work_dir)
