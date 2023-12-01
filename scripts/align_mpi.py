@@ -45,6 +45,17 @@ if __name__=='__main__':
         if RANK==0:
             print(os.listdir(align_config['mesh_dir']))
         comm.barrier()
+    elif args.mode == 'optimization':
+        config_parts = setup_configs(args)
+        align_config = config_parts[0]
+        mode = config_parts[1]
+        optimization_config = config_parts[2]
+        if RANK==0:
+            if not os.path.exists(align_config['tform_dir']):
+                os.mkdir(align_config['tform_dir'])
+            print("Warning: only one rank is doing the optimization")
+            optimize_main(None, align_config, optimization_config)
+        comm.barrier()
 
     elif args.mode=='pipeline':
         args.mode = 'meshing'
@@ -62,13 +73,6 @@ if __name__=='__main__':
             match_list=None
         match_list = comm.scatter(match_list, root=0)
     
-        #sections_per_rank = int(math.ceil(len(match_list)/NUMRANKS))
-        #if RANK!=(NUMRANKS-1):
-        #    indx = slice(RANK*sections_per_rank, (RANK+1)*sections_per_rank, 1)
-        #else:
-        #    indx = slice(RANK*sections_per_rank, len(match_list), 1)
-        #match_list = match_list[indx]
-        #print("align_mpi match_list", match_list)
         generate_mesh_main(align_config,mesh_config,match_list=match_list )
         if RANK==0:
             print(os.listdir(align_config['mesh_dir']))
