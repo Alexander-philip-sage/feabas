@@ -47,24 +47,31 @@ def mpi_downsample(thumbnail_configs,work_dir ):
         print(f"after scatter len(meta_list) {len(meta_list)}")
     downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list)
     comm.barrier()
-
+    print("rank", RANK, "finished mpi_downsample") 
+       
 def mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir):
     compare_distance = thumbnail_configs.pop('compare_distance', 1)
+    comm.barrier()
     if RANK==0:
         print("work_dir", work_dir)
         _, bname_list = setup_bnames(thumbnail_img_dir, work_dir)
     else:
         bname_list=None
     bname_list = comm.bcast(bname_list, root=0)
-    assert len(bname_list)>0, f"rank {RANK}: bname list must be greater than 0"    
+    if bname_list is None or len(bname_list)==0:
+        print(f"rank {RANK}: bname list must be greater than 0" )
+        comm.Abort()   
     pairnames = setup_pairnames(bname_list, compare_distance)
     pairnames = np.array_split(np.array(pairnames), NUMRANKS, axis=0)[RANK]
     if pairnames is None:
-        raise Exception("pairnames shouldn't be None. Are there more ranks than section pairs?")
+        print("pairnames shouldn't be None. Are there more ranks than section pairs?")
+        comm.Abort()
     else:
         print("rank", RANK, "pairnames", pairnames)
     align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
+    print("rank", RANK, "before comm barrier")
     comm.barrier()
+    print("rank", RANK, "after comm barrier")
     time_region.log_summary()
 
 if __name__=='__main__':
@@ -105,7 +112,8 @@ if __name__=='__main__':
         comm.barrier()
         time_region.log_summary()
     elif args.mode=='downsample_alignment':
-        raise Exception("this only works on one rank for unknown reasons. call downsample and alignment seperately. fails in mpi_alignment's scatter. rank 1 gets None instead of data")
+        #raise Exception("this only works on one rank for unknown reasons. call downsample and alignment seperately. fails in mpi_alignment's scatter. rank 1 gets None instead of data")
+        
         args.mode = 'downsample'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         if RANK==0:
@@ -117,3 +125,4 @@ if __name__=='__main__':
         args.mode = 'alignment'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir)
+        print("finished all downsample_alignment")

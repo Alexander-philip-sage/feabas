@@ -116,7 +116,7 @@ if __name__=='__main__':
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
         match_main(coord_list, match_dir, **stitch_configs['matching'])
-        time_region.log_summary()
+        #time_region.log_summary()
         section_names = [os.path.basename(x).split(".")[0] for x in coord_list]
         match_list = sorted([os.path.join(match_dir, x+".h5") for x in section_names])
         os.makedirs(mesh_dir, exist_ok=True)
@@ -156,7 +156,7 @@ if __name__=='__main__':
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
         match_main(coord_list, match_dir, **stitch_configs['matching'])
-        time_region.log_summary()
+        #time_region.log_summary()
         section_names = sorted([os.path.basename(x).split(".")[0] for x in coord_list])
         match_list = [os.path.join(match_dir, x+".h5") for x in section_names]
         os.makedirs(mesh_dir, exist_ok=True)

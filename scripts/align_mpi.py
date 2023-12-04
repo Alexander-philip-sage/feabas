@@ -93,7 +93,8 @@ if __name__=='__main__':
         #        print("rank", RANK, "tform_list", tform_list)        
         #print("align_mpi stitch_render_config['out_dir']",stitch_render_config['out_dir'])
         if tform_list is None:
-            raise Exception("tform_list shouldn't be None. Are there more ranks than sections?")  
+            print("tform_list shouldn't be None. Are there more ranks than sections?")  
+            comm.Abort()
    
         start_stitch_render_configs=time.time() 
         ##stitch_render_config is being split up with bcase however render_config is loaded from file by every rank

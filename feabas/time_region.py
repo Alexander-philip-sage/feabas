@@ -36,12 +36,14 @@ class TimeRegion():
             try:
                 csv_path = os.path.split(logging.getLoggerClass().root.handlers[0].baseFilename)[0]
             except:
-                csv_path = os.path.join(os.path.expanduser('~'),"mb_aligner_timings" )
+                csv_path = os.path.join(os.path.expanduser('~'),"feabas_timings" )
                 if not os.path.exists(csv_path):
                     os.mkdir(csv_path)
-            with open(os.path.join(csv_path, "mb_aligner_timings.csv"), 'w') as fileobj:
+            print("going to write to csv_path", csv_path)
+            with open(os.path.join(csv_path, "feabas_timings.csv"), 'w') as fileobj:
                 csvwriter  = csv.writer(fileobj)
                 csvwriter.writerow(all_times)
+        print("rank", RANK, "exited logger")
         #else:
         #    logstr = "not reporting log summary rank {}".format( RANK)
         #    logging.info(logstr)
