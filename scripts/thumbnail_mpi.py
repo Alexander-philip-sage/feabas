@@ -116,7 +116,6 @@ if __name__=='__main__':
         time_region.log_summary()
     elif args.mode=='downsample_alignment':
         #raise Exception("this only works on one rank for unknown reasons. call downsample and alignment seperately. fails in mpi_alignment's scatter. rank 1 gets None instead of data")
-        
         args.mode = 'downsample'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         if RANK==0:
