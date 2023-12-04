@@ -13,7 +13,7 @@ class TimeRegion():
         self.region_call_count= defaultdict(lambda: 0)
         self.log_summary_called = False
         logging.getLogger().setLevel(logging.INFO)
-    def log_summary(self):
+    def log_summary(self, save_csv=False):
         self.log_summary_called = True
         if RANK is None or RANK==0:
             if logging.root.level>logging.INFO:
@@ -33,16 +33,17 @@ class TimeRegion():
                     logging.info(reg+":tmg: calls {} total time {} time per call {}".format(call_count, 
                         round(total_time,3), 
                         round(total_time/call_count,6)))
-            try:
-                csv_path = os.path.split(logging.getLoggerClass().root.handlers[0].baseFilename)[0]
-            except:
-                csv_path = os.path.join(os.path.expanduser('~'),"feabas_timings" )
-                if not os.path.exists(csv_path):
-                    os.mkdir(csv_path)
-            print("going to write to csv_path", csv_path)
-            with open(os.path.join(csv_path, "feabas_timings.csv"), 'w') as fileobj:
-                csvwriter  = csv.writer(fileobj)
-                csvwriter.writerow(all_times)
+            if save_csv:
+                try:
+                    csv_path = os.path.split(logging.getLoggerClass().root.handlers[0].baseFilename)[0]
+                except:
+                    csv_path = os.path.join(os.path.expanduser('~'),"feabas_timings" )
+                    if not os.path.exists(csv_path):
+                        os.mkdir(csv_path)
+                print("going to write to csv_path", csv_path)
+                with open(os.path.join(csv_path, "feabas_timings.csv"), 'w') as fileobj:
+                    csvwriter  = csv.writer(fileobj)
+                    csvwriter.writerow(all_times)
         print("rank", RANK, "exited logger")
         #else:
         #    logstr = "not reporting log summary rank {}".format( RANK)

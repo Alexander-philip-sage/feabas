@@ -20,7 +20,7 @@ rm -r $WORKDIR/align/mesh
 rm -r $WORKDIR/align/tform
 rm -r $WORKDIR/aligned_stack
 NNODES=`wc -l < $PBS_NODEFILE`
-PPN=1
+PPN=2
 RANKS=$(( NNODES*PPN ))
 echo nnodes $NNODES
 echo ranks $RANKS 

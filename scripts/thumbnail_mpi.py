@@ -48,7 +48,8 @@ def mpi_downsample(thumbnail_configs,work_dir ):
     downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list)
     comm.barrier()
     print("rank", RANK, "finished mpi_downsample") 
-       
+    if RANK==0:
+        print("downsampled dirs", os.listdir(stitched_dir))
 def mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir):
     compare_distance = thumbnail_configs.pop('compare_distance', 1)
     comm.barrier()
@@ -73,6 +74,8 @@ def mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir):
     comm.barrier()
     print("rank", RANK, "after comm barrier")
     time_region.log_summary()
+    if RANK==0:
+        print("thumbnail align dirs", os.listdir(thumbnail_img_dir))
 
 if __name__=='__main__':
     args = parse_args()
@@ -125,4 +128,6 @@ if __name__=='__main__':
         args.mode = 'alignment'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir)
+        if RANK==0:
+            print("thumbnail align match_dir ", os.listdir(thumbnail_configs['match_dir']))
         print("finished all downsample_alignment")
