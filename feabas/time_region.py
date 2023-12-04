@@ -30,7 +30,7 @@ class TimeRegion():
                     total_time = self.region_time[reg]
                     call_count = self.region_call_count[reg]
                     all_times.append([reg, call_count,total_time,total_time/call_count])
-                    logging.info(reg+": calls {} total time {} time per call {}".format(call_count, 
+                    logging.info(reg+":tmg: calls {} total time {} time per call {}".format(call_count, 
                         round(total_time,3), 
                         round(total_time/call_count,6)))
             try:

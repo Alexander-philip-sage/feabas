@@ -73,7 +73,8 @@ if __name__=='__main__':
     arg_indx=None
     if args.mode=='downsample':
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
-        print("work_dir", work_dir)
+        if RANK==0:
+            print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
         if driver == 'image':      
@@ -88,7 +89,8 @@ if __name__=='__main__':
     elif args.mode =='downsample_precomputed_alignment':
         args.mode = 'downsample'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
-        print("work_dir", work_dir)
+        if RANK==0:
+            print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
         meta_list, meta_dir = setup_neuroglancer_precomputed(work_dir)
@@ -103,7 +105,7 @@ if __name__=='__main__':
         comm.barrier()
         time_region.log_summary()
     elif args.mode=='downsample_alignment':
-        raise Exception("this only works on one rank for unknown reasons. call downsample and alignment seperately. fails in mpi_alignment's scatter")
+        raise Exception("this only works on one rank for unknown reasons. call downsample and alignment seperately. fails in mpi_alignment's scatter. rank 1 gets None instead of data")
         args.mode = 'downsample'
         work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
         if RANK==0:
