@@ -39,7 +39,7 @@ def generate_stitched_mipmaps(img_dir, max_mip,meta_list: List[str] =None, **kwa
                 jobs.append(job)
             for job in jobs:
                 job.result()
-    logger.info('mipmapping generated.')
+    #logger.info('mipmapping generated.')
 
 
 def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[str]=None, **kwargs):
@@ -478,8 +478,10 @@ def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
         target_func(pairnames)
     else:
         num_workers = min(num_workers, len(pairnames))
+        print("num_workers",num_workers)
         match_per_job = thumbnail_configs.pop('match_per_job', 15)
         Njobs = max(num_workers, len(pairnames) // match_per_job)
+        print("Njobs",Njobs)
         indx_j = np.linspace(0, len(pairnames), num=Njobs+1, endpoint=True)
         indx_j = np.unique(np.round(indx_j).astype(np.int32))
         jobs = []

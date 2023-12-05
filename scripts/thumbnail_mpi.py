@@ -68,11 +68,12 @@ def mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir):
         print("pairnames shouldn't be None. Are there more ranks than section pairs?")
         comm.Abort()
     else:
-        print("rank", RANK, "pairnames", pairnames)
+        pass
+        #print("rank", RANK, "pairnames", pairnames)
     align_main(thumbnail_configs,pairnames=pairnames, num_workers=num_workers)
-    print("rank", RANK, "before comm barrier")
+    #print("rank", RANK, "before comm barrier")
     comm.barrier()
-    print("rank", RANK, "after comm barrier")
+    #print("rank", RANK, "after comm barrier")
     time_region.log_summary()
     if RANK==0:
         print("thumbnail align dirs", os.listdir(thumbnail_img_dir))
