@@ -265,7 +265,7 @@ def render_main(tform_list, out_dir, **kwargs):
                 os.makedirs(sec_outdir, exist_ok=True)
                 out_prefix = os.path.join(sec_outdir, sec_name)
             num_rendered = render_one_section(tname, out_prefix, meta_name=meta_name, **kwargs)
-            logger.info(f'{sec_name}: {num_rendered} tiles | {(time.time()-t0)/60} min')
+            #logger.info(f'{sec_name}: {num_rendered} tiles | {(time.time()-t0)/60} min')
         except Exception as err:
             logger.error(f'{sec_name}: {err}')
     time_region.track_time('stitch_main.render_main', time.time() - start_render_main)

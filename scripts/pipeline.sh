@@ -1,4 +1,6 @@
 #qsub -A BrainImagingML -q debug -l select=2 -l walltime=00:60:00 -k doe -l filesystems=home:eagle -N pipeline ./scripts/pipeline.sh
+#qsub -A BrainImagingML -q prod -l select=115 -l walltime=00:60:00 -k doe -l filesystems=home:eagle -N stitchthumbnail115 ./scripts/pipeline.sh
+
 #works with spawn, failes with fork /usr/bin/time mpiexec --np 1 --ppn 1 --depth 32 --cpu-bind depth python3 /eagle/BrainImagingML/apsage/feabas/scripts/stitch_mpi.py --work_dir $WORKDIR  --mode all
 #fails with fork /usr/bin/time mpiexec --np 1 --ppn 1 --depth 32  python3 /eagle/BrainImagingML/apsage/feabas/scripts/stitch_mpi.py --work_dir $WORKDIR  --mode all
 #fails with fork /usr/bin/time mpiexec --np 1 --ppn 1 python3 /eagle/BrainImagingML/apsage/feabas/scripts/stitch_mpi.py --work_dir $WORKDIR  --mode all
@@ -10,7 +12,7 @@
 . /eagle/BrainImagingML/apsage/feabas/env_polaris.sh 
 MPIVERSION=$(mpiexec -V)
 echo $MPIVERSION
-WORKDIR='/eagle/BrainImagingML/apsage/feabas/work_dir4'
+WORKDIR='/eagle/BrainImagingML/apsage/feabas/work_dir_all'
 rm -r $WORKDIR/stitched_sections
 rm -r $WORKDIR/stitch/match_h5
 rm -r $WORKDIR/stitch/tform
@@ -75,24 +77,24 @@ START=`date +"%s"`
 echo align meshing finished
 NOW=`date +"%s"`
 echo $((NOW - START)) seconds
-START=`date +"%s"`
-/usr/bin/time mpiexec -n $NNODES --ppn $PPN --depth 32 --cpu-bind depth \
-    python3 /eagle/BrainImagingML/apsage/feabas/scripts/align_mpi.py \
-    --work_dir $WORKDIR \
-    --mode optimization
-echo align optimization finished
-NOW=`date +"%s"`
-echo $((NOW - START)) seconds
-START=`date +"%s"`
-/usr/bin/time mpiexec -n $NNODES --ppn $PPN --depth 32 --cpu-bind depth \
-    python3 /eagle/BrainImagingML/apsage/feabas/scripts/align_mpi.py \
-    --work_dir $WORKDIR \
-    --mode render
-echo align render finished
-NOW=`date +"%s"`
-echo $((NOW - START)) seconds
-mkdir -p $WORKDIR/aligned_stack/tr10_tc10
-cp $WORKDIR/aligned_stack/mip0/*/*tr10-tc10.png $WORKDIR/aligned_stack/tr10_tc10/
+#START=`date +"%s"`
+#/usr/bin/time mpiexec -n $NNODES --ppn $PPN --depth 32 --cpu-bind depth \
+#    python3 /eagle/BrainImagingML/apsage/feabas/scripts/align_mpi.py \
+#    --work_dir $WORKDIR \
+#    --mode optimization
+#echo align optimization finished
+#NOW=`date +"%s"`
+#echo $((NOW - START)) seconds
+#START=`date +"%s"`
+#/usr/bin/time mpiexec -n $NNODES --ppn $PPN --depth 32 --cpu-bind depth \
+#    python3 /eagle/BrainImagingML/apsage/feabas/scripts/align_mpi.py \
+#    --work_dir $WORKDIR \
+#    --mode render
+#echo align render finished
+#NOW=`date +"%s"`
+#echo $((NOW - START)) seconds
+#mkdir -p $WORKDIR/aligned_stack/tr10_tc10
+#cp $WORKDIR/aligned_stack/mip0/*/*tr10-tc10.png $WORKDIR/aligned_stack/tr10_tc10/
 
 
 
