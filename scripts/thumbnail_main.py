@@ -2,6 +2,7 @@ import argparse
 import glob
 from functools import partial
 from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures import as_completed
 import math
 from multiprocessing import get_context
 import os
@@ -20,6 +21,7 @@ def generate_stitched_mipmaps(img_dir, max_mip,meta_list: List[str] =None, **kwa
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
     meta_dir = os.path.join(img_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
+    #print("meta_dir",meta_dir)
     if meta_list is None:
         print("file lookup with glob")
         meta_list = sorted(glob.glob(meta_dir, recursive=True))
@@ -37,9 +39,12 @@ def generate_stitched_mipmaps(img_dir, max_mip,meta_list: List[str] =None, **kwa
             for sname in secnames:
                 job = executor.submit(target_func, sname)
                 jobs.append(job)
-            for job in jobs:
+            #for job in jobs:
+            #    job.result()
+            for job in as_completed(jobs):
+                #metadata.update(job.result())                
                 job.result()
-    #logger.info('mipmapping generated.')
+    logger.info('mipmapping generated.')
 
 
 def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[str]=None, **kwargs):
@@ -63,7 +68,9 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, meta_list: List[st
             for metafile in meta_list:
                 job = executor.submit(target_func, metafile)
                 jobs.append(job)
-            for job in jobs:
+            #for job in jobs:
+            #    job.result()
+            for job in as_completed(jobs):
                 job.result()
     logger.info('mipmapping generated.')
 
@@ -102,7 +109,9 @@ def generate_thumbnails(src_dir, out_dir,meta_list=None, **kwargs):
                 sdir = os.path.join(src_dir, sname)
                 job = executor.submit(target_func, sdir, outname=outname)
                 jobs.append(job)
-            for job in jobs:
+            #for job in jobs:
+            #    job.result()
+            for job in as_completed(jobs):
                 job.result()
         #logger.info('thumbnails generated.')
     return updated
@@ -139,7 +148,9 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, meta_list: List[str]=None,
                 updated.append(sname)
                 job = executor.submit(target_func, meta_name, outname=outname)
                 jobs.append(job)
-            for job in jobs:
+            #for job in jobs:
+            #    job.result()
+            for job in as_completed(jobs):
                 job.result()
         logger.info('thumbnails generated.')
     return updated
@@ -209,7 +220,9 @@ def generate_thumbnail_masks(out_dir,mesh_dir=None, mesh_list=None,seclist=None,
                     continue
                 job = executor.submit(target_func, mname, out_name=outname)
                 jobs.append(job)
-            for job in jobs:
+            #for job in jobs:
+            #    job.result()
+            for job in as_completed(jobs):
                 job.result()
         #logger.info('thumbnail masks generated.')
 
@@ -279,18 +292,28 @@ def parse_args(args=None):
 
 def setup_globals(args): 
     if not args.work_dir:
-        root_dir = config.get_work_dir()
-        generate_settings = config.general_settings()
+        work_dir = config.get_work_dir()
+        general_settings = config.general_settings()
         stitch_configs = config.stitch_configs()
+        align_mip = config.align_configs()['matching']['working_mip_level']
+        stitch_render_conf = config.stitch_configs()['rendering']
     else:
-        root_dir = args.work_dir
-        config._default_configuration_folder = os.path.join(root_dir, "configs")
-        generate_settings= config.general_settings(config._default_configuration_folder)
-        stitch_configs = config.stitch_configs(root_dir)
+        work_dir = args.work_dir
+        config._default_configuration_folder = os.path.join(work_dir, "configs")
+        general_settings= config.general_settings(config._default_configuration_folder)
+        stitch_configs = config.stitch_configs(work_dir)
+        align_mip = config.align_configs(work_dir)['matching']['working_mip_level']
+        stitch_render_conf = config.stitch_configs(work_dir)['rendering']
 
-    num_cpus = generate_settings['cpu_budget']
+    default_stitched_sections = os.path.join(work_dir, 'stitched_sections')
+    if "out_dir" in stitch_render_conf.keys():
+        if stitch_render_conf['out_dir'] is None:
+            stitch_render_conf['out_dir']=default_stitched_sections
+    else:
+        stitch_render_conf.setdefault("out_dir",default_stitched_sections)
+    num_cpus = general_settings['cpu_budget']
 
-    thumbnail_configs = config.thumbnail_configs(root_dir)
+    thumbnail_configs = config.thumbnail_configs(work_dir)
     thumbnail_mip_lvl = thumbnail_configs.get('thumbnail_mip_level', 6)
     if args.mode.lower().startswith('d'):
         thumbnail_configs = thumbnail_configs['downsample']
@@ -300,7 +323,7 @@ def setup_globals(args):
         mode = 'alignment'
     else:
         raise ValueError
-    thumbnail_configs['work_dir'] = root_dir
+    thumbnail_configs['work_dir'] = work_dir
     thumbnail_configs['thumbnail_mip_lvl'] = thumbnail_mip_lvl
     num_workers = thumbnail_configs.get('num_workers', 1)
     if num_workers > num_cpus:
@@ -309,9 +332,10 @@ def setup_globals(args):
         thumbnail_configs['num_workers'] = num_workers
     nthreads = max(1, math.floor(num_cpus / num_workers))
     config.limit_numpy_thread(nthreads)
+    thumbnail_configs['nthreads'] = nthreads
 
-    thumbnail_dir = os.path.join(root_dir, 'thumbnail_align')
-    stitch_tform_dir = os.path.join(root_dir, 'stitch', 'tform')
+    thumbnail_dir = os.path.join(work_dir, 'thumbnail_align')
+    stitch_tform_dir = os.path.join(work_dir, 'stitch', 'tform')
     thumbnail_img_dir = os.path.join(thumbnail_dir, 'thumbnails')
     mat_mask_dir = os.path.join(thumbnail_dir, 'material_masks')
     reg_mask_dir = os.path.join(thumbnail_dir, 'region_masks')
@@ -325,40 +349,43 @@ def setup_globals(args):
     thumbnail_configs['match_dir'] = match_dir
     thumbnail_configs['manual_dir'] = manual_dir
     thumbnail_configs['reg_mask_dir'] = reg_mask_dir
-    return (root_dir, generate_settings, num_cpus, thumbnail_configs, 
-            thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, 
-            stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, 
-            match_dir, feature_match_dir)
+    thumbnail_configs['thumbnail_dir'] =thumbnail_dir
+    thumbnail_configs['align_mip'] =align_mip
+    return (general_settings, thumbnail_configs, 
+            mode, stitch_render_conf)
 
 def meta_list_to_mesh_list(meta_list, stitch_tform_dir):
     '''/eagle/BrainImagingML/apsage/feabas/work_dir4/stitched_sections/mip0/W02_Sec110_R1_montaged/metadata.txt'''
     sec_names = [x.split(os.path.sep)[-2] for x in meta_list]
     return [os.path.join(stitch_tform_dir, x+".h5") for x in sec_names]
 
-def downsample_main(thumbnail_configs, work_dir=None,meta_list=None):
+def downsample_main(thumbnail_configs,stitch_render_conf=None,meta_list=None):
     start_downsample=time.time()
     logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=thumbnail_configs.get('num_workers', 1)>1)
     thumbnail_configs['logger'] = logger_info[0]
     logger= logging.get_logger(logger_info[0])
-    align_mip = config.align_configs(work_dir)['matching']['working_mip_level']
-    stitch_conf = config.stitch_configs(work_dir)['rendering']
-    driver = stitch_conf.get('driver', 'image')
+    if 'align_mip' not in thumbnail_configs.keys():
+        align_mip = config.align_configs()['matching']['working_mip_level']
+    else:
+        align_mip = thumbnail_configs['align_mip']
+    if stitch_render_conf==None: 
+        print("loading from file")
+        stitch_render_conf = config.stitch_configs()['rendering']    
+    driver = stitch_render_conf.get('driver', 'image')
     stitch_tform_dir=thumbnail_configs['stitch_tform_dir']
     thumbnail_mip_lvl = thumbnail_configs['thumbnail_mip_lvl']
     thumbnail_img_dir=thumbnail_configs['thumbnail_img_dir']
-    mat_mask_dir=thumbnail_configs['mat_mask_dir']
-    feature_match_dir=thumbnail_configs['feature_match_dir']
-    match_dir =thumbnail_configs['match_dir']    
+    mat_mask_dir=thumbnail_configs['mat_mask_dir'] 
     if 'thumbnail_img_dir' in thumbnail_configs.keys():
         thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
     if driver == 'image':
         max_mip = thumbnail_configs.pop('max_mip', max(0, thumbnail_mip_lvl-1))
         max_mip = max(align_mip, max_mip)
-        src_dir0 = config.stitch_render_dir(work_dir)
+        src_dir0 = stitch_render_conf['out_dir']
         #print("src_dir0", src_dir0)
-        pattern = stitch_conf['filename_settings']['pattern']
-        one_based = stitch_conf['filename_settings']['one_based']
-        fillval = stitch_conf['loader_settings'].get('fillval', 0)
+        pattern = stitch_render_conf['filename_settings']['pattern']
+        one_based = stitch_render_conf['filename_settings']['one_based']
+        fillval = stitch_render_conf['loader_settings'].get('fillval', 0)
         thumbnail_configs.setdefault('pattern', pattern)
         thumbnail_configs.setdefault('one_based', one_based)
         thumbnail_configs.setdefault('fillval', fillval)
@@ -452,6 +479,7 @@ def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
     thumbnail_mip_lvl=thumbnail_configs['thumbnail_mip_lvl']
     thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
     reg_mask_dir = thumbnail_configs['reg_mask_dir']
+    num_workers = thumbnail_configs['num_workers']
     os.makedirs(match_dir, exist_ok=True)
     os.makedirs(manual_dir, exist_ok=True)
     compare_distance = thumbnail_configs.pop('compare_distance', 1)
@@ -488,7 +516,9 @@ def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
                 prnm = pairnames[idx0:idx1]
                 job = executor.submit(target_func, pairnames=prnm)
                 jobs.append(job)
-            for job in jobs:
+            #for job in jobs:
+            #    job.result()
+            for job in as_completed(jobs):
                 job.result()
     time_region.track_time('thumbnail_main.alignment', time.time() - start_alignment)
     #logger.info('finished thumbnail alignment.')
@@ -497,8 +527,8 @@ def align_main(thumbnail_configs,pairnames=None, num_workers:int =None):
 if __name__ == '__main__':
     args = parse_args()
 
-    root_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
-
+    general_settings, thumbnail_configs, mode, stitch_render_conf = setup_globals(args)
+    num_workers = thumbnail_configs['thumbnail_configs']
     stt_idx, stp_idx, step = args.start, args.stop, args.step
     if stp_idx == 0:
         stp_idx = None

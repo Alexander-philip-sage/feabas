@@ -131,7 +131,7 @@ if __name__=='__main__':
             print(f"stitch_mpi optimization num_workers {stitch_configs['optimization']['num_workers']}")
             print(f"num_workers { num_workers}")
             coord_list=sorted(glob.glob(os.path.join(coord_dir, "*.txt")))
-            print(f"before scatter len(coord_list) {len(coord_list)}")
+            #print(f"before scatter len(coord_list) {len(coord_list)}")
             coord_list= np.array_split(np.array(coord_list), NUMRANKS,axis=0)
         if RANK:
             coord_list=None
@@ -141,8 +141,8 @@ if __name__=='__main__':
         #    for i in range(NUMRANKS):
         #        print(f"len(coord_list[{i}]) {len(coord_list[i])}")
         coord_list = comm.scatter(coord_list, root=0)
-        if not RANK:
-            print(f"after scatter len(coord_list) {len(coord_list)}")
+        #if not RANK:
+        #    print(f"after scatter len(coord_list) {len(coord_list)}")
         assert len(coord_list) > 0, f"didn't find any txt coord files {coord_dir} for rank {RANK} NUMRANKS {NUMRANKS}"
         #sections_per_rank = int(math.ceil(len(coord_list)/NUMRANKS))
         #if RANK!=(NUMRANKS-1):
