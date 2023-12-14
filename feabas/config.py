@@ -57,7 +57,7 @@ def stitch_config_file(work_dir=None):
     if not os.path.isfile(config_file):
         print("couldn't find file at",config_file )
         config_file = os.path.join(_default_configuration_folder, 'default_stitching_configs.yaml')
-        assert(os.path.isfile(config_file))
+        assert(os.path.isfile(config_file)), f"expecting file to exist: {config_file}"
     return config_file
 
 
