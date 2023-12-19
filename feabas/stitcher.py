@@ -309,6 +309,7 @@ class Stitcher:
         jobs = []
         num_new_matches = 0
         err_raised = False
+        #print("stitch.match using num_workers",num_workers)
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
             for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
                 ovlp_g = overlaps[idx0:idx1] # global indices of overlaps
@@ -319,6 +320,7 @@ class Stitcher:
                 job = executor.submit(target_func, ovlp, imgpaths, bboxes, index_mapper=mapper)
                 jobs.append(job)
             matched_counter = 0
+            #print("stitch.match jobs created", len(jobs))
             for job in as_completed(jobs):
                 matches, match_strains, ouch = job.result()
                 err_raised = err_raised or ouch

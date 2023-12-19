@@ -8,7 +8,6 @@ from functools import partial
 import os
 import time
 import tensorstore as ts
-
 import feabas
 from feabas import config, logging, dal
 from feabas.time_region import time_region
@@ -278,7 +277,9 @@ def stitch_switchboard(mode):
         stitch_configs_render.setdefault('meta_dir', render_meta_dir)
         print(f"image_outdir {image_outdir}")
         render_main(tform_list, image_outdir, **stitch_configs_render)
+        time.sleep(5)
     elif mode in ['optimization', 'optimize']:
+        print("starting optimize")
         stitch_configs_opt = stitch_configs['optimization']
         match_regex = os.path.abspath(os.path.join(match_dir, '*.h5'))
         match_list = sorted(glob.glob(match_regex))
@@ -288,6 +289,7 @@ def stitch_switchboard(mode):
             match_list = match_list[::-1]
         os.makedirs(mesh_dir, exist_ok=True)
         optmization_main(match_list, mesh_dir, **stitch_configs_opt)
+        time.sleep(5)
     elif mode in ['matching', 'match']:
         stitch_configs_match = stitch_configs['matching']
         coord_regex = os.path.abspath(os.path.join(coord_dir, '*.txt'))
@@ -299,6 +301,7 @@ def stitch_switchboard(mode):
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
         match_main(coord_list, match_dir, **stitch_configs_match)    
+        time.sleep(5)
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Run stitching")
@@ -321,6 +324,7 @@ if __name__ == '__main__':
         stitch_configs = config.stitch_configs()
     else:
         root_dir = args.work_dir
+        os.chdir(root_dir)
         config._default_configuration_folder = args.work_dir
         generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
         stitch_configs = config.stitch_configs(root_dir)
@@ -328,12 +332,15 @@ if __name__ == '__main__':
     print("root_dir", root_dir)
     print("generate_settings", generate_settings)
     print("stitch_configs", stitch_configs)
+    print("mode", args.mode)
     if args.mode.lower().startswith('r'):
         mode = 'rendering'
     elif args.mode.lower().startswith('o'):
         mode = 'optimization'
-    else:
+    elif args.mode.lower().startswith('m'):
         mode = 'matching'
+    else:
+        mode='all'
     if mode=='all':
         num_workers = stitch_configs.get('num_workers', 1)
         if num_workers > num_cpus:

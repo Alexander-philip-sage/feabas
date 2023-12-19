@@ -253,6 +253,7 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Align thumbnails")
     parser.add_argument("--mode", metavar="mode", type=str, default='downsample')
+    parser.add_argument("--work_dir", metavar="work_dir", type=str, default=None)
     parser.add_argument("--start", metavar="start", type=int, default=0)
     parser.add_argument("--step", metavar="step", type=int, default=1)
     parser.add_argument("--stop", metavar="stop", type=int, default=0)
@@ -263,11 +264,22 @@ def parse_args(args=None):
 if __name__ == '__main__':
     args = parse_args()
 
-    root_dir = config.get_work_dir()
-    generate_settings = config.general_settings()
-    num_cpus = generate_settings['cpu_budget']
+    if not args.work_dir:
+        root_dir = config.get_work_dir()
+        generate_settings = config.general_settings()
+        thumbnail_configs = config.thumbnail_configs()
+        stitch_conf = config.stitch_configs()['rendering']
+        align_mip = config.align_configs()['matching']['working_mip_level']
+    else:
+        root_dir = args.work_dir
+        os.chdir(root_dir)
+        config._default_configuration_folder = args.work_dir
+        align_mip = config.align_configs(root_dir)['matching']['working_mip_level']
+        stitch_conf = config.stitch_configs(root_dir)['rendering']
+        generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
+        thumbnail_configs = config.thumbnail_configs(root_dir)
 
-    thumbnail_configs = config.thumbnail_configs()
+    num_cpus = generate_settings['cpu_budget']
     thumbnail_mip_lvl = thumbnail_configs.get('thumbnail_mip_level', 6)
     if args.mode.lower().startswith('d'):
         thumbnail_configs = thumbnail_configs['downsample']
@@ -312,8 +324,8 @@ if __name__ == '__main__':
         logger_info = logging.initialize_main_logger(logger_name='stitch_mipmap', mp=num_workers>1)
         thumbnail_configs['logger'] = logger_info[0]
         logger= logging.get_logger(logger_info[0])
-        align_mip = config.align_configs()['matching']['working_mip_level']
-        stitch_conf = config.stitch_configs()['rendering']
+        
+        
         driver = stitch_conf.get('driver', 'image')
         if driver == 'image':
             max_mip = thumbnail_configs.pop('max_mip', max(0, thumbnail_mip_lvl-1))
