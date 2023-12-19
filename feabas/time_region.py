@@ -44,7 +44,7 @@ class TimeRegion():
                 with open(os.path.join(csv_path, "feabas_timings.csv"), 'w') as fileobj:
                     csvwriter  = csv.writer(fileobj)
                     csvwriter.writerow(all_times)
-        print("rank", RANK, "exited logger")
+        #print("rank", RANK, "exited logger")
         #else:
         #    logstr = "not reporting log summary rank {}".format( RANK)
         #    logging.info(logstr)

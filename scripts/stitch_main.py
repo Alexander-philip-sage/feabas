@@ -342,6 +342,7 @@ def setup_globals(args):
         root_dir = args.work_dir
         config._default_configuration_folder = os.path.join(args.work_dir, 'configs')
         generate_settings= config.general_settings(config._default_configuration_folder)
+        generate_settings['working_directory'] = args.work_dir
         stitch_configs = config.stitch_configs(root_dir)
     num_cpus = generate_settings['cpu_budget']
     mode = args.mode.lower()
@@ -393,9 +394,12 @@ if __name__ == '__main__':
     args = parse_args()
     root_dir, generate_settings, stitch_configs, num_cpus, mode, num_workers, nthreads, stitch_dir, coord_dir, mesh_dir, match_dir, render_meta_dir=setup_globals(args)
     stt_idx, stp_idx, step = args.start, args.stop, args.step
+    
     if stp_idx == 0:
         stp_idx = None
     indx = slice(stt_idx, stp_idx, step)
+    #print("root_dir", root_dir)
+    #print("stitch_dir",stitch_dir)
     if mode =='all':
         stitch_switchboard('matching')
         stitch_switchboard('optimization')

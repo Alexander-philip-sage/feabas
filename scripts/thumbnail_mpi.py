@@ -31,9 +31,11 @@ def setup_neuroglancer_precomputed(work_dir):
         arg_indx = slice(RANK*sections_per_rank, len(meta_list), 1)
     return meta_list[arg_indx], meta_dir
 
-def mpi_downsample(thumbnail_configs,work_dir ):
+def mpi_downsample(thumbnail_configs,stitch_render_conf ):
+    assert stitch_render_conf is not None
     min_mip = thumbnail_configs.get('min_mip', 0)
-    stitched_dir = config.stitch_render_dir(work_dir)
+    stitched_dir = stitch_render_conf['out_dir']
+    assert stitched_dir is not None
     meta_dir = os.path.join(stitched_dir, 'mip'+str(min_mip), '**', 'metadata.txt')
     if RANK==0:
         meta_list = sorted(glob.glob(meta_dir, recursive=True))
@@ -45,13 +47,14 @@ def mpi_downsample(thumbnail_configs,work_dir ):
     assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
     if  RANK==0:
         print(f"after scatter len(meta_list) {len(meta_list)}")
-    downsample_main(thumbnail_configs,work_dir=work_dir,meta_list = meta_list)
+    downsample_main(thumbnail_configs,stitch_render_conf=stitch_render_conf,meta_list = meta_list)
     comm.barrier()
     print("rank", RANK, "finished mpi_downsample") 
     if RANK==0:
         print("downsampled dirs", os.listdir(stitched_dir))
 def mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir):
     compare_distance = thumbnail_configs.pop('compare_distance', 1)
+    work_dir = thumbnail_configs['work_dir']
     comm.barrier()
     if RANK==0:
         print("work_dir", work_dir)
@@ -83,32 +86,35 @@ if __name__=='__main__':
     num_workers=None
     arg_indx=None
     if args.mode=='downsample':
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        general_settings, thumbnail_configs, mode, stitch_render_conf = setup_globals(args)
+        work_dir = thumbnail_configs['work_dir']
         if RANK==0:
             print("work_dir", work_dir)
-        stitch_conf = config.stitch_configs(work_dir)['rendering']
-        driver = stitch_conf.get('driver', 'image')
+        driver = stitch_render_conf.get('driver', 'image')
         if driver == 'image':      
-            mpi_downsample(thumbnail_configs,work_dir )  
+            mpi_downsample(thumbnail_configs, stitch_render_conf )  
         elif driver =='neuroglancer_precomputed':
             meta_list, meta_dir = setup_neuroglancer_precomputed(work_dir)
             downsample_main(thumbnail_configs,meta_list=meta_list)     
         comm.barrier()   
     elif args.mode == 'alignment':
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        general_settings, thumbnail_configs, mode, stitch_render_conf = setup_globals(args)
+        thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
         mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir)
     elif args.mode =='downsample_precomputed_alignment':
         args.mode = 'downsample'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        general_settings, thumbnail_configs, mode, stitch_render_conf = setup_globals(args)
+        work_dir = thumbnail_configs['work_dir']
+        thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
         if RANK==0:
             print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
         meta_list, meta_dir = setup_neuroglancer_precomputed(work_dir)
         section_names = sorted([os.path.basename(x).split(".")[0] for x in meta_list])
-        downsample_main(thumbnail_configs, meta_list=meta_list)     
+        downsample_main(thumbnail_configs,stitch_render_conf=stitch_render_conf, meta_list=meta_list)     
         args.mode = 'alignment'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        general_settings, thumbnail_configs, mode, stitch_render_conf = setup_globals(args)
         compare_distance = thumbnail_configs.pop('compare_distance', 1)
         imglist = [os.path.join(thumbnail_img_dir, x+".png") for x in section_names]
         _, bname_list, pairnames = setup_pair_names(thumbnail_img_dir,work_dir,  compare_distance, imglist=imglist)
@@ -118,15 +124,17 @@ if __name__=='__main__':
     elif args.mode=='downsample_alignment':
         #raise Exception("this only works on one rank for unknown reasons. call downsample and alignment seperately. fails in mpi_alignment's scatter. rank 1 gets None instead of data")
         args.mode = 'downsample'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        general_settings, thumbnail_configs, mode, stitch_render_conf = setup_globals(args)
+        work_dir = thumbnail_configs['work_dir']
+        thumbnail_img_dir = thumbnail_configs['thumbnail_img_dir']
         if RANK==0:
             print("work_dir", work_dir)
         stitch_conf = config.stitch_configs(work_dir)['rendering']
         driver = stitch_conf.get('driver', 'image')
         assert driver=='image'
-        mpi_downsample(thumbnail_configs,work_dir )
+        mpi_downsample(thumbnail_configs,stitch_render_conf )
         args.mode = 'alignment'
-        work_dir, generate_settings, num_cpus, thumbnail_configs, thumbnail_mip_lvl, mode, num_workers, nthreads, thumbnail_dir, stitch_tform_dir, thumbnail_img_dir, mat_mask_dir, reg_mask_dir, manual_dir, match_dir, feature_match_dir = setup_globals(args)
+        general_settings, thumbnail_configs, mode, stitch_render_conf = setup_globals(args)
         mpi_alignment(thumbnail_configs,num_workers, thumbnail_img_dir)
         if RANK==0:
             print("thumbnail align match_dir ", os.listdir(thumbnail_configs['match_dir']))

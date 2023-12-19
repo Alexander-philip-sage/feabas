@@ -10,7 +10,7 @@ elif os.path.isfile(os.path.join(os.path.dirname(os.getcwd()), 'configs', 'gener
     _default_configuration_folder = os.path.join(os.path.dirname(os.getcwd()), 'configs')
 else:
     _default_configuration_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'configs')
-
+_default_log_folder = os.path.join(os.path.basename(_default_configuration_folder),"logs")
 
 @lru_cache(maxsize=1)
 def general_settings(config_dir= _default_configuration_folder):
@@ -41,8 +41,9 @@ def get_log_dir():
     conf = general_settings()
     log_dir = conf.get('logging_directory', None)
     if log_dir is None:
-        work_dir = conf.get('working_directory', './work_dir')
-        log_dir = os.path.join(work_dir, 'logs')
+        log_dir = _default_log_folder
+    #    work_dir = conf.get('working_directory', './work_dir')
+    #    log_dir = os.path.join(work_dir, 'logs')
     return log_dir
 
 
@@ -57,7 +58,7 @@ def stitch_config_file(work_dir=None):
     if not os.path.isfile(config_file):
         print("couldn't find file at",config_file )
         config_file = os.path.join(_default_configuration_folder, 'default_stitching_configs.yaml')
-        assert(os.path.isfile(config_file))
+        assert(os.path.isfile(config_file)), f"expecting file to exist: {config_file}"
     return config_file
 
 
