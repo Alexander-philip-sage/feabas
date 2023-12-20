@@ -324,10 +324,11 @@ if __name__ == '__main__':
         stitch_configs = config.stitch_configs()
     else:
         root_dir = args.work_dir
-        os.chdir(root_dir)
+        #os.chdir(root_dir)
         config._default_configuration_folder = args.work_dir
         generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
         stitch_configs = config.stitch_configs(root_dir)
+    print('os.getcwd()',os.getcwd())
     num_cpus = generate_settings['cpu_budget']
     print("root_dir", root_dir)
     print("generate_settings", generate_settings)

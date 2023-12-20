@@ -10,7 +10,7 @@ elif os.path.isfile(os.path.join(os.path.dirname(os.getcwd()), 'configs', 'gener
     _default_configuration_folder = os.path.join(os.path.dirname(os.getcwd()), 'configs')
 else:
     _default_configuration_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'configs')
-
+_default_log_folder=None
 
 @lru_cache(maxsize=1)
 def general_settings(config_dir= _default_configuration_folder):
@@ -41,8 +41,12 @@ def get_log_dir():
     conf = general_settings()
     log_dir = conf.get('logging_directory', None)
     if log_dir is None:
-        work_dir = conf.get('working_directory', './work_dir')
-        log_dir = os.path.join(work_dir, 'logs')
+        _default_log_folder = os.path.join(os.path.basename(_default_configuration_folder),"logs")
+        log_dir=_default_log_folder
+        if not os.path.exists(log_dir):
+            os.mkdir(log_dir)
+        #work_dir = conf.get('working_directory', './work_dir')
+        #log_dir = os.path.join(work_dir, 'logs')
     return log_dir
 
 
