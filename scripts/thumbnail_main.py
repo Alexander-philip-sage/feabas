@@ -229,6 +229,12 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
                     _, mask0 = cv2.connectedComponents(mask_t, connectivity=4, ltype=cv2.CV_16U)
                 else:
                     mask0 = None
+                if hasattr(mask0, 'shape') and ((mask0.shape[0] != img0.shape[0]) or (mask0.shape[1] != img0.shape[1])):
+                    ht0 = min(mask0.shape[0], img0.shape[0])
+                    wd0 = min(mask0.shape[1], img0.shape[1])
+                    mask_t = np.zeros_like(mask0, shape=img0.shape)
+                    mask_t[:ht0, :wd0] = mask0[:ht0, :wd0]
+                    mask0 = mask_t
                 minfo0 = thumbnail.prepare_image(img0, mask=mask0, **feature_match_settings)
                 prepared_cache[sname0] = minfo0
             if sname1 in prepared_cache:
@@ -243,6 +249,12 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
                     _, mask1 = cv2.connectedComponents(mask_t, connectivity=4, ltype=cv2.CV_16U)
                 else:
                     mask1 = None
+                if hasattr(mask1, 'shape') and ((mask1.shape[0] != img1.shape[0]) or (mask1.shape[1] != img1.shape[1])):
+                    ht1 = min(mask1.shape[0], img1.shape[0])
+                    wd1 = min(mask1.shape[1], img1.shape[1])
+                    mask_t = np.zeros_like(mask1, shape=img1.shape)
+                    mask_t[:ht1, :wd1] = mask1[:ht1, :wd1]
+                    mask1 = mask_t
                 minfo1 = thumbnail.prepare_image(img1, mask=mask1, **feature_match_settings)
                 prepared_cache[sname1] = minfo1
             thumbnail.align_two_thumbnails(minfo0, minfo1, outname, **kwargs)
@@ -253,7 +265,7 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Align thumbnails")
-    parser.add_argument("--mode", metavar="mode", type=str, default='downsample')
+    parser.add_argument("--mode", metavar="mode", type=str, default='match')
     parser.add_argument("--start", metavar="start", type=int, default=0)
     parser.add_argument("--step", metavar="step", type=int, default=1)
     parser.add_argument("--stop", metavar="stop", type=int, default=0)
@@ -399,9 +411,17 @@ if __name__ == '__main__':
                 region_labels.append(mat.mask_label)
         thumbnail_configs.setdefault('region_labels', region_labels)
         pairnames = []
+        match_name_delimiter = thumbnail_configs.get('match_name_delimiter', '__to__')
         for stp in range(1, compare_distance+1):
             for k in range(len(bname_list)-stp):
-                pairnames.append((bname_list[k], bname_list[k+stp]))
+                sname0_ext = bname_list[k]
+                sname1_ext = bname_list[k+stp]
+                sname0 = os.path.splitext(sname0_ext)[0]
+                sname1 = os.path.splitext(sname1_ext)[0]
+                outname = os.path.join(match_dir, sname0 + match_name_delimiter + sname1 + '.h5')
+                if os.path.isfile(outname):
+                    continue
+                pairnames.append((sname0_ext, sname1_ext))
         pairnames.sort()
         pairnames = pairnames[arg_indx]
         target_func = partial(align_thumbnail_pairs, image_dir=img_dir, out_dir=match_dir,
