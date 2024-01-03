@@ -1433,7 +1433,7 @@ class Mesh:
 
 
     @config_cache('TBD')
-    def _vertex_distances(self, gear=const.MESH_GEAR_INITIAL, vtx_mask=None, tri_mask=None):
+    def vertex_distances(self, gear=const.MESH_GEAR_INITIAL, vtx_mask=None, tri_mask=None):
         """sparse matrix storing lengths of the edges."""
         if Mesh._masked_all(vtx_mask):
             vertices = self.vertices(gear=gear)
@@ -1444,7 +1444,7 @@ class Mesh:
             D = sparse.csr_matrix((edges_len, (idx0, idx1)), shape=(Npt, Npt))
             return D
         else:
-            D = self._vertex_distances(gear=gear, vtx_mask=None, tri_mask=tri_mask)
+            D = self.vertex_distances(gear=gear, vtx_mask=None, tri_mask=tri_mask)
             return D[vtx_mask][:, vtx_mask]
 
 
@@ -1612,6 +1612,20 @@ class Mesh:
                 mid_norender.append(m.uid)
         if len(mid_norender) > 0:
             mask = ~np.isin(self.material_ids, mid_norender)
+        else:
+            mask = np.ones(self.num_triangles, dtype=bool)
+        return mask
+
+
+    @config_cache(const.MESH_GEAR_INITIAL)
+    def triangle_mask_for_stiffness(self, ** kwargs):
+        stiffness_multiplier_threshold = kwargs.get('stiffness_multiplier_threshold', 0)
+        mid_disrd = []
+        for _, m in self._material_table:
+            if m.stiffness_multiplier < stiffness_multiplier_threshold:
+                mid_disrd.append(m.uid)
+        if len(mid_disrd) > 0:
+            mask = ~np.isin(self.material_ids, mid_disrd)
         else:
             mask = np.ones(self.num_triangles, dtype=bool)
         return mask
