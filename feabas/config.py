@@ -11,6 +11,16 @@ elif os.path.isfile(os.path.join(os.path.dirname(os.getcwd()), 'configs', 'gener
 else:
     _default_configuration_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'configs')
 
+_default_log_dir = None
+
+def print_default_log_dir():
+    print("_default_log_dir",_default_log_dir)
+def set_work_dir(work_dir):
+    global _default_configuration_folder
+    global _default_log_dir
+    _default_configuration_folder = work_dir
+    _default_log_dir = os.path.join(work_dir,"logs")  
+    print("set_work_dir", _default_log_dir)  
 
 @lru_cache(maxsize=1)
 def general_settings(config_dir= _default_configuration_folder):
@@ -33,11 +43,17 @@ DEFAULT_RESOLUTION = general_settings().get('full_resolution', constant.DEFAULT_
 def get_work_dir():
     conf = general_settings()
     work_dir = conf.get('working_directory', './work_dir')
+    global _default_log_dir
+    log_dir = os.path.join(work_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    _default_log_dir = log_dir
     return work_dir
 
 
 @lru_cache(maxsize=1)
 def get_log_dir():
+    if _default_log_dir:
+        return _default_log_dir
     conf = general_settings()
     log_dir = conf.get('logging_directory', None)
     if log_dir is None:
