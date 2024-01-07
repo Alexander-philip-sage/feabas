@@ -272,8 +272,9 @@ if __name__ == '__main__':
         align_mip = config.align_configs()['matching']['working_mip_level']
     else:
         root_dir = args.work_dir
-        os.chdir(root_dir)
-        config._default_configuration_folder = args.work_dir
+        os.chdir(root_dir) 
+        config.set_work_dir(args.work_dir)
+        logging.set_log_configs()
         align_mip = config.align_configs(root_dir)['matching']['working_mip_level']
         stitch_conf = config.stitch_configs(root_dir)['rendering']
         generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
