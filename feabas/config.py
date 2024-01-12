@@ -10,7 +10,21 @@ elif os.path.isfile(os.path.join(os.path.dirname(os.getcwd()), 'configs', 'gener
     _default_configuration_folder = os.path.join(os.path.dirname(os.getcwd()), 'configs')
 else:
     _default_configuration_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'configs')
-_default_log_folder=None
+
+_default_work_dir = None
+_default_log_dir = None
+
+def print_default_log_dir():
+    print("_default_log_dir",_default_log_dir)
+def set_work_dir(work_dir):
+    os.chdir(work_dir)
+    global _default_configuration_folder
+    global _default_log_dir
+    global _default_work_dir
+    _default_work_dir = work_dir
+    _default_configuration_folder = os.path.join(work_dir,"configs")  
+    _default_log_dir = os.path.join(work_dir,"logs")  
+    print("set_work_dir log_dir:", _default_log_dir)  
 
 @lru_cache(maxsize=1)
 def general_settings(config_dir= _default_configuration_folder):
@@ -19,6 +33,7 @@ def general_settings(config_dir= _default_configuration_folder):
         with open(config_file, 'r') as f:
             conf = yaml.safe_load(f)
     else:
+        print("general_settings: didn't find config file", config_file)
         conf = {}
     if conf.get('cpu_budget', None) is None:
         import psutil
@@ -31,38 +46,43 @@ DEFAULT_RESOLUTION = general_settings().get('full_resolution', constant.DEFAULT_
 
 @lru_cache(maxsize=1)
 def get_work_dir():
-    conf = general_settings()
-    work_dir = conf.get('working_directory', './work_dir')
+    if _default_work_dir is None:
+        conf = general_settings()
+        work_dir = conf.get('working_directory', './work_dir')
+    else:
+        work_dir = _default_work_dir
+    global _default_log_dir
+    log_dir = os.path.join(work_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    _default_log_dir = log_dir
     return work_dir
 
 
 @lru_cache(maxsize=1)
 def get_log_dir():
+    if _default_log_dir:
+        return _default_log_dir
     conf = general_settings()
     log_dir = conf.get('logging_directory', None)
     if log_dir is None:
-        _default_log_folder = os.path.join(os.path.basename(_default_configuration_folder),"logs")
-        log_dir=_default_log_folder
-        if not os.path.exists(log_dir):
-            os.mkdir(log_dir)
-        #work_dir = conf.get('working_directory', './work_dir')
-        #log_dir = os.path.join(work_dir, 'logs')
+        work_dir = conf.get('working_directory', './work_dir')
+        log_dir = os.path.join(work_dir, 'logs')
     return log_dir
 
 
 @lru_cache(maxsize=1)
-def stitch_config_file(work_dir=None):
+def stitch_config_file(work_dir=_default_work_dir):
     if work_dir is None:
         work_dir = get_work_dir()
     config_file = os.path.join(work_dir, 'configs', 'stitching_configs.yaml')
     if not os.path.isfile(config_file):
         config_file = os.path.join(_default_configuration_folder, 'default_stitching_configs.yaml')
-        assert(os.path.isfile(config_file))
+        assert(os.path.isfile(config_file)), f"config_file, {config_file}"
     return config_file
 
 
 @lru_cache(maxsize=1)
-def stitch_configs(work_dir=None):
+def stitch_configs(work_dir=_default_work_dir):
     if work_dir is None:
         with open(stitch_config_file(), 'r') as f:
             conf = yaml.safe_load(f)
@@ -73,7 +93,7 @@ def stitch_configs(work_dir=None):
 
 
 @lru_cache(maxsize=1)
-def material_table_file(work_dir=None):
+def material_table_file(work_dir=_default_work_dir):
     if not work_dir:
         work_dir = get_work_dir()
     mt_file = os.path.join(work_dir, 'configs', 'material_table.json')
@@ -82,7 +102,7 @@ def material_table_file(work_dir=None):
     return mt_file
 
 @lru_cache(maxsize=1)
-def align_config_file(root_dir=None):
+def align_config_file(root_dir=_default_work_dir):
     if root_dir:
         work_dir = root_dir
     else:
@@ -90,12 +110,12 @@ def align_config_file(root_dir=None):
     config_file = os.path.join(work_dir, 'configs', 'alignment_configs.yaml')
     if not os.path.isfile(config_file):
         config_file = os.path.join(_default_configuration_folder, 'default_alignment_configs.yaml')
-        assert(os.path.isfile(config_file))
+        assert(os.path.isfile(config_file)), f"config_file, {config_file}"
     return config_file
 
 
 @lru_cache(maxsize=1)
-def align_configs(root_dir=None):
+def align_configs(root_dir=_default_work_dir):
     if root_dir:
         with open(align_config_file(root_dir), 'r') as f:
             conf = yaml.safe_load(f)
@@ -112,7 +132,7 @@ def align_configs(root_dir=None):
 
 
 @lru_cache(maxsize=1)
-def thumbnail_config_file(root_dir=None):
+def thumbnail_config_file(root_dir=_default_work_dir):
     if root_dir:
         work_dir = root_dir
     else:
@@ -127,14 +147,14 @@ def thumbnail_config_file(root_dir=None):
 
 
 @lru_cache(maxsize=1)
-def thumbnail_configs(work_dir=None):
+def thumbnail_configs(work_dir=_default_work_dir):
     with open(thumbnail_config_file(work_dir), 'r') as f:
         conf = yaml.safe_load(f)
     return conf
 
 
 @lru_cache(maxsize=1)
-def stitch_render_dir(work_dir=None):
+def stitch_render_dir(work_dir=_default_work_dir):
     if work_dir is None:
         config_file = stitch_config_file()
     else:
@@ -151,7 +171,7 @@ def stitch_render_dir(work_dir=None):
 
 
 @lru_cache(maxsize=1)
-def align_render_dir(work_dir=None):
+def align_render_dir(work_dir=_default_work_dir):
     config_file = align_config_file(work_dir)
     with open(config_file, 'r') as f:        
         align_configs = yaml.safe_load(f)

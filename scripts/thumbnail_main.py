@@ -8,7 +8,7 @@ import os
 import time
 from feabas.time_region import time_region
 from feabas import config, logging
-
+from feabas.time_region import timer_func
 
 def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
     min_mip = kwargs.pop('min_mip', 0)
@@ -266,20 +266,16 @@ if __name__ == '__main__':
 
     if not args.work_dir:
         root_dir = config.get_work_dir()
-        generate_settings = config.general_settings()
-        thumbnail_configs = config.thumbnail_configs()
-        stitch_conf = config.stitch_configs()['rendering']
-        align_mip = config.align_configs()['matching']['working_mip_level']
     else:
         root_dir = args.work_dir
-        os.chdir(root_dir)
-        config._default_configuration_folder = args.work_dir
-        align_mip = config.align_configs(root_dir)['matching']['working_mip_level']
-        stitch_conf = config.stitch_configs(root_dir)['rendering']
-        generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
-        thumbnail_configs = config.thumbnail_configs(root_dir)
+        config.set_work_dir(args.work_dir)
+        logging.set_log_configs()
+    thumbnail_configs = config.thumbnail_configs()
+    general_settings = config.general_settings()
+    stitch_conf = config.stitch_configs()['rendering']
+    align_mip = config.align_configs()['matching']['working_mip_level']
 
-    num_cpus = generate_settings['cpu_budget']
+    num_cpus = general_settings['cpu_budget']
     thumbnail_mip_lvl = thumbnail_configs.get('thumbnail_mip_level', 6)
     if args.mode.lower().startswith('d'):
         thumbnail_configs = thumbnail_configs['downsample']

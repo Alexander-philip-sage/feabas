@@ -11,7 +11,7 @@ import tensorstore as ts
 import feabas
 from feabas import config, logging, dal
 from feabas.time_region import time_region
-
+from feabas.time_region import timer_func
 def match_one_section(coordname, outname, **kwargs):
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
@@ -25,7 +25,7 @@ def match_one_section(coordname, outname, **kwargs):
     stitcher.save_to_h5(outname, save_matches=True, save_meshes=False)
     return 1
 
-
+@timer_func
 def match_main(coord_list, out_dir, **kwargs):
     start_match_main = time.time()
     num_workers = kwargs.get('num_workers', 1)
@@ -42,7 +42,6 @@ def match_main(coord_list, out_dir, **kwargs):
         flag = match_one_section(coordname, outname, **kwargs)
         if flag == 1:
             logger.info(f'ending for {fname}: {(time.time()-t0)/60} min')
-    time_region.track_time("stitch_main.match_main", time.time() - start_match_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
@@ -114,7 +113,7 @@ def optimize_one_section(matchname, outname, **kwargs):
         logger.warning(f'\t{bname}: {ncomp} disconnected groups found, among which {ncomp1} have more than one tiles.')
     logger.info(finish_str)
 
-
+@timer_func
 def optmization_main(match_list, out_dir, **kwargs):
     start_optmization_main = time.time()
     num_workers = kwargs.pop('num_workers', 1)
@@ -139,7 +138,6 @@ def optmization_main(match_list, out_dir, **kwargs):
                 jobs.append(job)
             for job in jobs:
                 job.result()
-    time_region.track_time("stitch_main.optimization_main", time.time() - start_optmization_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
@@ -215,9 +213,8 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
             out_loader.to_coordinate_file(meta_name)
     return len(metadata)
 
-
-def render_main(tform_list, out_dir, **kwargs):
-    start_render_main = time.time()
+@timer_func
+def stitch_render_main(tform_list, out_dir, **kwargs):
     logger_info = logging.initialize_main_logger(logger_name='stitch_rendering', mp=False)
     logger = logger_info[0]
     driver = kwargs.get('driver', 'image')
@@ -246,7 +243,6 @@ def render_main(tform_list, out_dir, **kwargs):
             logger.info(f'{sec_name}: {num_rendered} tiles | {(time.time()-t0)/60} min')
         except Exception as err:
             logger.error(f'{sec_name}: {err}')
-    time_region.track_time('stitch_main.render_main', time.time() - start_render_main)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
@@ -264,7 +260,7 @@ def stitch_switchboard(mode):
     if mode in ['rendering', 'render']:
         stitch_configs_render = stitch_configs['rendering']
         stitch_configs_render.pop('out_dir', '')
-        image_outdir = config.stitch_render_dir(root_dir)
+        image_outdir = config.stitch_render_dir()
         driver = stitch_configs_render.get('driver', 'image')
         if driver == 'image':
             image_outdir = os.path.join(image_outdir, 'mip0')
@@ -276,7 +272,7 @@ def stitch_switchboard(mode):
             tform_list = tform_list[::-1]
         stitch_configs_render.setdefault('meta_dir', render_meta_dir)
         print(f"image_outdir {image_outdir}")
-        render_main(tform_list, image_outdir, **stitch_configs_render)
+        stitch_render_main(tform_list, image_outdir, **stitch_configs_render)
         time.sleep(5)
     elif mode in ['optimization', 'optimize']:
         print("starting optimize")
@@ -320,19 +316,17 @@ if __name__ == '__main__':
     args = parse_args()
     if not args.work_dir:
         root_dir = config.get_work_dir()
-        generate_settings = config.general_settings()
-        stitch_configs = config.stitch_configs()
     else:
         root_dir = args.work_dir
-        #os.chdir(root_dir)
-        config._default_configuration_folder = args.work_dir
-        generate_settings= config.general_settings(os.path.join(root_dir, "configs"))
-        stitch_configs = config.stitch_configs(root_dir)
+        config.set_work_dir(args.work_dir)
+        logging.set_log_configs()
+    general_settings= config.general_settings()
+    stitch_configs = config.stitch_configs()
     print('os.getcwd()',os.getcwd())
-    num_cpus = generate_settings['cpu_budget']
+    num_cpus = general_settings['cpu_budget']
     print("root_dir", root_dir)
-    print("generate_settings", generate_settings)
-    print("stitch_configs", stitch_configs)
+    #print("general_settings", general_settings)
+    #print("stitch_configs", stitch_configs)
     print("mode", args.mode)
     if args.mode.lower().startswith('r'):
         mode = 'rendering'

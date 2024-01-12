@@ -11,7 +11,7 @@ import gc
 from feabas.time_region import time_region
 from feabas import config, logging
 import feabas.constant as const
-
+from feabas.time_region import timer_func
 
 def generate_mesh_from_mask(mask_names, outname, **kwargs):
     if os.path.isfile(outname):
@@ -67,7 +67,7 @@ def generate_mesh_from_mask(mask_names, outname, **kwargs):
     mshname = os.path.splitext(os.path.basename(mask_name))[0]
     M.save_to_h5(outname, save_material=True, override_dict={'name': mshname})
 
-
+@timer_func
 def generate_mesh_main():
     start_generate_mesh_main=time.time()
     logger_info = logging.initialize_main_logger(logger_name='mesh_generation', mp=num_workers>1)
@@ -111,7 +111,6 @@ def generate_mesh_main():
                     jobs.append(job)
             for job in jobs:
                 job.result()
-    time_region.track_time('align_main.generate_mesh_main', time.time() - start_generate_mesh_main)                
     logger.info('meshes generated.')
     logging.terminate_logger(*logger_info)
 
@@ -158,7 +157,7 @@ def match_main(match_list):
     logger.info('matching finished.')
     logging.terminate_logger(*logger_info)
 
-
+@timer_func
 def optimize_main(section_list):
     start_optimize_main=time.time() 
     from feabas.aligner import Stack
@@ -190,7 +189,6 @@ def optimize_main(section_list):
         for key in mnames:
             val = cost[key]
             f.write(f'{key}, {val[0]}, {val[1]}\n')
-    time_region.track_time('align_main.optimize_main', time.time() - start_optimize_main)
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
@@ -264,7 +262,7 @@ def render_one_section(h5name, z_prefix='', **kwargs):
     return len(rendered)
 
 
-def render_main(tform_list, z_prefix=None):
+def align_render_main(tform_list, z_prefix=None):
     logger_info = logging.initialize_main_logger(logger_name='align_render', mp=False)
     align_config['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
@@ -324,15 +322,23 @@ def parse_args(args=None):
     parser.add_argument("--step", metavar="step", type=int, default=1)
     parser.add_argument("--stop", metavar="stop", type=int, default=0)
     parser.add_argument("--reverse",  action='store_true')
+    parser.add_argument("--work_dir", metavar="work_dir", type=str, default=None)
+
     return parser.parse_args(args)
 
 
 if __name__ == '__main__':
     args = parse_args()
 
-    root_dir = config.get_work_dir()
-    generate_settings = config.general_settings()
-    num_cpus = generate_settings['cpu_budget']
+    if not args.work_dir:
+        root_dir = config.get_work_dir()
+    else:
+        root_dir = args.work_dir
+        config.set_work_dir(args.work_dir)
+        logging.set_log_configs()
+
+    general_settings = config.general_settings()
+    num_cpus = general_settings['cpu_budget']
 
     align_config = config.align_configs()
     if args.mode.lower().startswith('r'):
@@ -458,7 +464,7 @@ if __name__ == '__main__':
             digit_num = math.ceil(math.log10(len(seclist)))
             z_prefix.update({os.path.basename(s): str(k).rjust(digit_num, '0')+'_'
                              for k, s in zip(z_indx, seclist)})
-        render_main(tform_list, z_prefix)
+        align_render_main(tform_list, z_prefix)
         time_region.track_time('align_main.rendering', time.time() - start_rendering)
     elif mode == 'downsample':
         start_downsample = time.time()

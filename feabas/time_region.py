@@ -30,7 +30,7 @@ class TimeRegion():
                     total_time = self.region_time[reg]
                     call_count = self.region_call_count[reg]
                     all_times.append([reg, call_count,total_time,total_time/call_count])
-                    logging.info(reg+": calls {} total time {} time per call {}".format(call_count, 
+                    logging.info(reg+":tmg: calls {} total time {} time per call {}".format(call_count, 
                         round(total_time,3), 
                         round(total_time/call_count,6)))
             try:
@@ -53,3 +53,16 @@ class TimeRegion():
             self.region_call_count[name] +=1
 
 time_region = TimeRegion()
+
+def timer_func(func):
+    # This function shows the execution time of
+    # the function object passed
+    def wrap_func(*args, **kwargs):
+        t1 = time.time()
+        result = func(*args, **kwargs)
+        t2 = time.time()
+        time_diff = t2-t1
+        #print(f'Function {func.__name__!r} executed in {(time_diff):.4f}s')
+        time_region.track_time(func.__name__, time_diff)
+        return result
+    return wrap_func

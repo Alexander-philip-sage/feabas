@@ -17,6 +17,7 @@ from feabas.mesh import Mesh
 from feabas import common, spatial, dal, logging
 from feabas.config import DEFAULT_RESOLUTION, general_settings
 from feabas.time_region import time_region
+from feabas.time_region import timer_func
 
 class MeshRenderer:
     """
@@ -583,7 +584,7 @@ def generate_bboxes_outfnames(prefix, image_loader, bboxes, driver, rows, cols, 
             bboxes_out.append(bbox_out)
 
         return bboxes_out, bboxes, ts_specs
-
+@timer_func
 def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
     start_render_whole_mesh = time.time()
     driver = kwargs.get('driver', 'image')
@@ -666,7 +667,8 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 bboxes_out_list.append(bboxes_out[idx0:idx1])
         submeshes = mesh.submeshes_from_bboxes(bbox_unions, save_material=True)
         jobs = []
-        print(f"running render_whole_mesh with {num_workers} workers")
+        if num_workers<32:
+            print(f"running render_whole_mesh with {num_workers} workers")
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
             if driver == 'image':
                 for msh, bbox, fnames in zip(submeshes, bboxes_list, filenames_list):
@@ -688,7 +690,6 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
             rendered = target_func(mesh, bboxes, filenames)
         else:
             rendered = target_func(mesh, bboxes, bboxes_out=bboxes_out)
-    time_region.track_time("renderer.render_whole_mesh", time.time() - start_render_whole_mesh)
     return rendered
 
 

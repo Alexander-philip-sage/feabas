@@ -16,10 +16,10 @@ LEVELS = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO,
 def _get_log_configs():
     conf = config.general_settings()
     log_dir = config.get_log_dir()
+    #print("_get_log_configs", log_dir)
     logfile_level = LEVELS.get(conf.get('logfile_level', 'WARNING').upper(), logging.WARNING)
     console_level = LEVELS.get(conf.get('console_level', 'INFO').upper(), logging.INFO)
     archive_level = LEVELS.get(conf.get('archive_level', 'INFO').upper(), logging.INFO)
-    os.makedirs(log_dir, exist_ok=True)
     log_conf = {
         'log_dir': log_dir,
         'logfile_level': logfile_level,
@@ -31,11 +31,17 @@ def _get_log_configs():
 
 log_conf = _get_log_configs()
 
+def set_log_configs():
+    global log_conf
+    if config._default_log_dir:
+        log_conf['log_dir'] = config._default_log_dir
+
 
 def get_main_logger(logger_name):
     main_logger = logging.getLogger(logger_name)
     main_logger.setLevel(logging.WARNING)
     log_dir = log_conf['log_dir']
+    print("get_main_logger", log_dir)
     logger_prefix = logger_name.replace('.', '_')
     formatter = logging.Formatter(fmt='%(asctime)s-%(levelname)s: %(message)s',
                                 datefmt='%Y-%m-%d %H:%M:%S')
@@ -74,6 +80,9 @@ def listener_process(queue, logger_name):
 
 
 def initialize_main_logger(logger_name='log', mp=False):
+    log_dir = log_conf['log_dir']
+    if log_dir is not None:
+        os.makedirs(log_dir, exist_ok=True)
     if mp:
         queue = Manager().Queue(-1)
         listener = Process(target=listener_process, args=(queue, logger_name))
