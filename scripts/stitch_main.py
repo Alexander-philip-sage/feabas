@@ -6,7 +6,7 @@ from multiprocessing import get_context
 import math
 from functools import partial
 import os
-import time
+import time, datetime
 import tensorstore as ts
 import feabas
 from feabas import config, logging, dal
@@ -251,7 +251,7 @@ def look_for_duplicate_sections(coord_list):
     section_names = set()
     for bn in basenames:
         parts = bn.split('_')
-        assert len(parts)==4, "expected section tilespec file to be of form 'W03_Sec106_R2_montaged.txt'"
+        assert len(parts)>=3, "expected section tilespec file to be of form 'W03_Sec106_R2_montaged.txt'"
         sn = ''.join(parts[:2])
         if sn in section_names:
             raise Exception(f"ERROR: two sections with the same sec name {sn} {bn}\nThis is likely representative of a duplicate section")
@@ -327,7 +327,7 @@ if __name__ == '__main__':
     print("root_dir", root_dir)
     #print("general_settings", general_settings)
     #print("stitch_configs", stitch_configs)
-    print("mode", args.mode)
+    print(datetime.datetime.now(), "start mode stitch", args.mode)
     if args.mode.lower().startswith('r'):
         mode = 'rendering'
     elif args.mode.lower().startswith('o'):
@@ -367,5 +367,5 @@ if __name__ == '__main__':
         stitch_switchboard('rendering')
     else:
         stitch_switchboard(mode)
-
+    print(datetime.datetime.now(), "finish mode stitch", args.mode)
     time_region.log_summary()

@@ -5,7 +5,7 @@ from concurrent.futures.process import ProcessPoolExecutor
 import math
 from multiprocessing import get_context
 import os
-import time
+import time, datetime
 from feabas.time_region import time_region
 from feabas import config, logging
 from feabas.time_region import timer_func
@@ -306,7 +306,7 @@ if __name__ == '__main__':
         arg_indx = slice(stp_idx, stt_idx, -step)
     else:
         arg_indx = slice(stt_idx, stp_idx, step)
-
+    print(datetime.datetime.now(), "start mode thumbnail.", args.mode)
     thumbnail_dir = os.path.join(root_dir, 'thumbnail_align')
     stitch_tform_dir = os.path.join(root_dir, 'stitch', 'tform')
     img_dir = os.path.join(thumbnail_dir, 'thumbnails')
@@ -436,5 +436,6 @@ if __name__ == '__main__':
         time_region.track_time('thumbnail_main.alignment', time.time() - start_alignment)
         logger.info('finished thumbnail alignment.')
         logging.terminate_logger(*logger_info)
+    print(datetime.datetime.now(), "finish mode thumbnail.", args.mode)
     time_region.log_summary()
 

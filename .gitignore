@@ -1,11 +1,7 @@
-work_dir_all2
-work_dir_all
-work_dir69
-work_dir95
-work_dir37
-work_dir4
+work_dir*
 runs
 py38
+env_polaris.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

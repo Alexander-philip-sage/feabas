@@ -41,7 +41,7 @@ def get_main_logger(logger_name):
     main_logger = logging.getLogger(logger_name)
     main_logger.setLevel(logging.WARNING)
     log_dir = log_conf['log_dir']
-    print("get_main_logger", log_dir)
+    #print("get_main_logger", log_dir)
     logger_prefix = logger_name.replace('.', '_')
     formatter = logging.Formatter(fmt='%(asctime)s-%(levelname)s: %(message)s',
                                 datefmt='%Y-%m-%d %H:%M:%S')

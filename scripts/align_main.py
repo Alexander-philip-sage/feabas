@@ -6,7 +6,7 @@ from concurrent.futures.process import ProcessPoolExecutor
 from multiprocessing import get_context
 import math
 import os
-import time
+import time, datetime
 import gc
 from feabas.time_region import time_region
 from feabas import config, logging
@@ -408,7 +408,7 @@ if __name__ == '__main__':
     from feabas.aligner import match_section_from_initial_matches
     from feabas.renderer import render_whole_mesh, VolumeRenderer
     import numpy as np
-
+    print(datetime.datetime.now(), "start align.", mode)
     align_dir = os.path.join(root_dir, 'align')
     mesh_dir = os.path.join(align_dir, 'mesh')
     match_dir = os.path.join(align_dir, 'matches')
@@ -500,4 +500,5 @@ if __name__ == '__main__':
         time_region.track_time('align_main.tensorstore_rendering', time.time() - start_tensorstore_rendering)
         logger.info('finished tensorstore_rendering')
         logging.terminate_logger(*logger_info)
+    print(datetime.datetime.now(), "finished align.", mode)
     time_region.log_summary()   
