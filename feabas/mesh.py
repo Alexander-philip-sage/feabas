@@ -1433,7 +1433,7 @@ class Mesh:
 
 
     @config_cache('TBD')
-    def _vertex_distances(self, gear=const.MESH_GEAR_INITIAL, vtx_mask=None, tri_mask=None):
+    def vertex_distances(self, gear=const.MESH_GEAR_INITIAL, vtx_mask=None, tri_mask=None):
         """sparse matrix storing lengths of the edges."""
         if Mesh._masked_all(vtx_mask):
             vertices = self.vertices(gear=gear)
@@ -1444,7 +1444,7 @@ class Mesh:
             D = sparse.csr_matrix((edges_len, (idx0, idx1)), shape=(Npt, Npt))
             return D
         else:
-            D = self._vertex_distances(gear=gear, vtx_mask=None, tri_mask=tri_mask)
+            D = self.vertex_distances(gear=gear, vtx_mask=None, tri_mask=tri_mask)
             return D[vtx_mask][:, vtx_mask]
 
 
@@ -1617,6 +1617,20 @@ class Mesh:
         return mask
 
 
+    @config_cache(const.MESH_GEAR_INITIAL)
+    def triangle_mask_for_stiffness(self, ** kwargs):
+        stiffness_multiplier_threshold = kwargs.get('stiffness_multiplier_threshold', 0)
+        mid_disrd = []
+        for _, m in self._material_table:
+            if m.stiffness_multiplier < stiffness_multiplier_threshold:
+                mid_disrd.append(m.uid)
+        if len(mid_disrd) > 0:
+            mask = ~np.isin(self.material_ids, mid_disrd)
+        else:
+            mask = np.ones(self.num_triangles, dtype=bool)
+        return mask
+
+
     def shapely_regions(self, gear=None, tri_mask=None, offsetting=True):
         """
         return the shapely (Multi)Polygon that cover the region of the triangles.
@@ -1629,11 +1643,25 @@ class Mesh:
         else:
             vertices = self.vertices(gear=gear)
         polygons = []
+        seg_valid = self.check_segment_collision(gear=gear, tri_mask=tri_mask)
         for chains in grouped_chains:
-            P0 = shpgeo.Polygon(vertices[chains[0]]).buffer(0)
-            for hole in chains[1:]:
-                P0 = P0.difference(shpgeo.Polygon(vertices[hole]).buffer(0))
-            polygons.append(P0)
+            if (seg_valid) or (len(chains) < 2):
+                P0 = shpgeo.Polygon(vertices[chains[0]]).buffer(0)
+                for hole in chains[1:]:
+                    P0 = P0.difference(shpgeo.Polygon(vertices[hole]).buffer(0))
+                polygons.append(P0)
+            else:
+                Ls = [shpgeo.LinearRing(vertices[s]) for s in chains]
+                Ps = list(polygonize(unary_union(Ls)))
+                if shapely.__version__ >= '2.0.0':
+                    Lt = [s.buffer(self._epsilon, join_style=2, single_sided=True) for s in Ls]
+                else:
+                    Lt = [s.parallel_offset(self._epsilon, 'left', join_style=2) for s in Ls]
+                    Lt = [s.buffer(-self._epsilon, single_sided=True, join_style=2) for s in Lt]
+                Lt = unary_union(Lt)
+                for pp in Ps:
+                    if Lt.intersection(pp).area > 0:
+                        polygons.append(pp)   
         return unary_union(polygons)
 
 
@@ -2083,7 +2111,7 @@ class Mesh:
         if mode in (const.ANNEAL_GLOBAL_RIGID, const.ANNEAL_GLOBAL_AFFINE):
             v0 = self.vertices_w_offset(gear=gear[0])
             v1 = self.vertices_w_offset(gear=gear[1])
-            if mode == const.ANNEAL_CONNECTED_RIGID:
+            if mode == const.ANNEAL_GLOBAL_RIGID:
                 _, R = spatial.fit_affine(v0, v1, return_rigid=True)
                 self.apply_affine(R, gear[1])
             else:
@@ -2173,6 +2201,14 @@ class Mesh:
             if not p.is_valid:
                 valid = False
                 break
+            if holes is not None:
+                out_ccw = shpgeo.LinearRing(outL).is_ccw
+                for h in holes:
+                    if shpgeo.LinearRing(h).is_ccw == out_ccw:
+                        valid = False
+                        break
+                if not valid:
+                    break
             if covered is None:
                 covered = p
             elif p.intersects(covered):
