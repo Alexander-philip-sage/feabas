@@ -10,6 +10,7 @@ from feabas.time_region import time_region
 from feabas import config, logging
 from feabas.time_region import timer_func
 
+@timer_func
 def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
     min_mip = kwargs.pop('min_mip', 0)
     num_workers = kwargs.pop('num_workers', 1)
@@ -98,7 +99,7 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
         logger.info('thumbnails generated.')
     return updated
 
-
+@timer_func
 def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = kwargs.pop('logger', None)
