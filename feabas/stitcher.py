@@ -114,6 +114,8 @@ class Stitcher:
         save_matches = kwargs.get('save_matches', True)
         save_meshes = kwargs.get('save_meshes', True)
         compression = kwargs.get('compression', True)
+        #with open(fname,'w') as python_file_descriptor:
+        #    f = h5py.File(python_file_descriptor)
         with h5py.File(fname, 'w') as f:
             if compression:
                 create_dataset = partial(f.create_dataset, compression='gzip')
@@ -154,7 +156,7 @@ class Stitcher:
                         prefix = 'moving_vertices/' + str(k)
                         v = m.vertices(gear=const.MESH_GEAR_MOVING)
                         create_dataset(prefix, data=v)
-
+            f.flush()
 
     def load_matches_from_h5(self, fname, check_order=False):
         with h5py.File(fname, 'r') as f:

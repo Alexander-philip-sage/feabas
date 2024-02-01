@@ -774,6 +774,7 @@ class Mesh:
                     _ = fname.create_dataset(prefix+key, data=val)
                 else:
                     _ = fname.create_dataset(prefix+key, data=val, compression="gzip")
+                fname.flush()
         else:
             if '.h5' not in fname:
                 fname = os.path.join(fname, self.name + '.h5')
@@ -787,7 +788,7 @@ class Mesh:
                         _ = f.create_dataset(prefix+key, data=val)
                     else:
                         _ = f.create_dataset(prefix+key, data=val, compression="gzip")
-
+                f.flush()
 
     def copy(self, deep=False, save_material=True, override_dict=None):
         if override_dict is None:

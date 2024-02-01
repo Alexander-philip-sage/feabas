@@ -2,7 +2,10 @@ work_dir*
 runs
 py38
 env_polaris.sh
-
+stitch_thumbnail.e*
+stitch_thumbnail.o*
+stitch_thumbnail_align.e*
+stitch_thumbnail_align.o*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -563,6 +563,7 @@ def align_two_thumbnails(img0, img1, outname, mask0=None, mask1=None, **kwargs):
             f.create_dataset('xy1', data=xy1, compression="gzip")
             f.create_dataset('weight', data=weight, compression="gzip")
             f.create_dataset('resolution', data=resolution)
+            f.flush()
         return xy0.shape[0]
 
 

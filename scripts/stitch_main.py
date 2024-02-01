@@ -275,7 +275,7 @@ def stitch_switchboard(mode):
         stitch_configs_render.setdefault('meta_dir', render_meta_dir)
         print(f"image_outdir {image_outdir}")
         stitch_render_main(tform_list, image_outdir, **stitch_configs_render)
-        time.sleep(5)
+
     elif mode in ['optimization', 'optimize']:
         print("starting optimize")
         stitch_configs_opt = stitch_configs['optimization']
@@ -287,7 +287,7 @@ def stitch_switchboard(mode):
             match_list = match_list[::-1]
         os.makedirs(mesh_dir, exist_ok=True)
         optmization_main(match_list, mesh_dir, **stitch_configs_opt)
-        time.sleep(5)
+
     elif mode in ['matching', 'match']:
         stitch_configs_match = stitch_configs['matching']
         coord_regex = os.path.abspath(os.path.join(coord_dir, '*.txt'))
@@ -299,7 +299,7 @@ def stitch_switchboard(mode):
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
         match_main(coord_list, match_dir, **stitch_configs_match)    
-        time.sleep(5)
+        
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Run stitching")

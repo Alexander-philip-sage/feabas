@@ -638,6 +638,8 @@ class StaticImageLoader(AbstractImageLoader):
                 bbox_str = [str(s) for s in bbox]
                 line = delimiter.join((imgpath, *bbox_str))
                 f.write(line+'\n')
+            f.flush()
+            os.fsync(f.fileno())
 
 
     def _cache_image(self, fileid, img=None, **kwargs):

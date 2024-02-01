@@ -128,6 +128,7 @@ def match_section_from_initial_matches(match_name, meshes, loaders, out_dir, con
             f.create_dataset('resolution', data=resolution)
             f.create_dataset('name0', data=str_to_numpy_ascii(secnames[0]))
             f.create_dataset('name1', data=str_to_numpy_ascii(secnames[1]))
+            f.flush()
         return len(xy0)
 
 

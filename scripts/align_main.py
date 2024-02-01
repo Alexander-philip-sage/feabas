@@ -69,7 +69,6 @@ def generate_mesh_from_mask(mask_names, outname, **kwargs):
 
 @timer_func
 def generate_mesh_main():
-    start_generate_mesh_main=time.time()
     logger_info = logging.initialize_main_logger(logger_name='mesh_generation', mp=num_workers>1)
     mesh_config['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
@@ -182,6 +181,8 @@ def optimize_main(section_list):
             for line in lines:
                 mn, dis0, dis1 = line.split(', ')
                 cost0[mn] = (float(dis0), float(dis1))
+            f.flush()
+            os.fsync(f.fileno())
         cost0.update(cost)
         cost = cost0
     with open(os.path.join(tform_dir, 'residue.csv'), 'w') as f:
@@ -189,6 +190,9 @@ def optimize_main(section_list):
         for key in mnames:
             val = cost[key]
             f.write(f'{key}, {val[0]}, {val[1]}\n')
+        f.flush()
+        os.fsync(f.fileno())
+
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
