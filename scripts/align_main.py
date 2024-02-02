@@ -510,4 +510,6 @@ if __name__ == '__main__':
         logger.info('finished tensorstore_rendering')
         logging.terminate_logger(*logger_info)
     print(datetime.datetime.now(), "finished align.", mode)
+    time.sleep(5*60)
+    print(datetime.datetime.now(), "finish waiting 5 min", args.mode)    
     time_region.log_summary()   

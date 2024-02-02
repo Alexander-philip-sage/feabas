@@ -370,4 +370,6 @@ if __name__ == '__main__':
     else:
         stitch_switchboard(mode)
     print(datetime.datetime.now(), "finish mode stitch", args.mode)
+    time.sleep(5*60)
+    print(datetime.datetime.now(), "finish waiting 5 min", args.mode)
     time_region.log_summary()
