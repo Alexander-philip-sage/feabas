@@ -26,8 +26,7 @@ def match_one_section(coordname, outname, **kwargs):
     return 1
 
 @timer_func
-def match_main(coord_list, out_dir, **kwargs):
-    start_match_main = time.time()
+def stitch_match_main(coord_list, out_dir, **kwargs):
     num_workers = kwargs.get('num_workers', 1)
     logger_info = logging.initialize_main_logger(logger_name='stitch_matching', mp=num_workers>1)
     kwargs['logger'] = logger_info[0]
@@ -75,7 +74,7 @@ def optimize_one_section(matchname, outname, **kwargs):
         else:
             groupings = np.zeros(stitcher.num_tiles, dtype=np.int32)
     else:
-        groupings = None
+        groupings = None 
     stitcher.set_groupings(groupings)
     mesh_settings = mesh_settings.copy()
     mesh_sizes = mesh_settings.pop('mesh_sizes', [75, 150, 300])
@@ -114,8 +113,7 @@ def optimize_one_section(matchname, outname, **kwargs):
     logger.info(finish_str)
 
 @timer_func
-def optmization_main(match_list, out_dir, **kwargs):
-    start_optmization_main = time.time()
+def stitch_optmization_main(match_list, out_dir, **kwargs):
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = logging.initialize_main_logger(logger_name='stitch_optmization', mp=num_workers>1)
     kwargs['logger'] = logger_info[0]
@@ -286,7 +284,7 @@ def stitch_switchboard(mode):
         if args.reverse:
             match_list = match_list[::-1]
         os.makedirs(mesh_dir, exist_ok=True)
-        optmization_main(match_list, mesh_dir, **stitch_configs_opt)
+        stitch_optmization_main(match_list, mesh_dir, **stitch_configs_opt)
 
     elif mode in ['matching', 'match']:
         stitch_configs_match = stitch_configs['matching']
@@ -298,7 +296,7 @@ def stitch_switchboard(mode):
         if args.reverse:
             coord_list = coord_list[::-1]
         os.makedirs(match_dir, exist_ok=True)
-        match_main(coord_list, match_dir, **stitch_configs_match)    
+        stitch_match_main(coord_list, match_dir, **stitch_configs_match)    
         
 
 def parse_args(args=None):

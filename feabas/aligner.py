@@ -121,7 +121,9 @@ def match_section_from_initial_matches(match_name, meshes, loaders, out_dir, con
     if xy0 is None:
         return 0
     else:
-        with h5py.File(outname, 'w') as f:
+        #with os.open(outname, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as python_file_descriptor:
+        #with open(outname, 'w') as python_file_descriptor:
+        with h5py.File(outname, 'w') as f:        
             f.create_dataset('xy0', data=xy0, compression="gzip")
             f.create_dataset('xy1', data=xy1, compression="gzip")
             f.create_dataset('weight', data=weight, compression="gzip")
@@ -129,6 +131,8 @@ def match_section_from_initial_matches(match_name, meshes, loaders, out_dir, con
             f.create_dataset('name0', data=str_to_numpy_ascii(secnames[0]))
             f.create_dataset('name1', data=str_to_numpy_ascii(secnames[1]))
             f.flush()
+            #python_file_descriptor.flush()
+            #os.fsync(python_file_descriptor.fileno())
         return len(xy0)
 
 

@@ -587,7 +587,9 @@ class Geometry:
 
 
     def save_to_h5(self, h5name):
-        with h5py.File(h5name, 'w') as f:
+        #with open(h5name, 'w') as python_file_descriptor:
+        #with os.open(h5name, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as python_file_descriptor:
+        with h5py.File(h5name, 'w') as f:   
             _ = f.create_dataset('resolution', data=self._resolution)
             _ = f.create_dataset('epsilon', data=self._epsilon)
             if bool(self._zorder):
@@ -599,7 +601,9 @@ class Geometry:
                 if hasattr(pp, 'wkb_hex'):
                     keyname = 'regions/{}'.format(name)
                     _ = f.create_dataset(keyname, data=pp.wkb_hex)
-
+            f.flush()
+            #python_file_descriptor.flush()
+            #os.fsync(python_file_descriptor.fileno())
 
     def add_regions(self, regions, mode='u', pos=None):
         """

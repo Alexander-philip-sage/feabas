@@ -157,8 +157,7 @@ def match_main(match_list):
     logging.terminate_logger(*logger_info)
 
 @timer_func
-def optimize_main(section_list):
-    start_optimize_main=time.time() 
+def align_optimize_main(section_list):
     from feabas.aligner import Stack
     stack_config = align_config.get('stack_config', {}).copy()
     slide_window = align_config.get('slide_window', {}).copy()
@@ -166,7 +165,7 @@ def optimize_main(section_list):
     stack_config.setdefault('section_order_file', os.path.join(root_dir, 'section_order.txt'))
     slide_window['logger'] = logger_info[0]
     logger = logging.get_logger(logger_info[0])
-    print("optimize_main: section_list", section_list)
+    print("align_optimize_main: section_list", section_list)
     stk = Stack(section_list=section_list, mesh_dir=mesh_dir, match_dir=match_dir, mesh_out_dir=tform_dir, **stack_config)
     section_list = stk.section_list
     stk.update_lock_flags({s: os.path.isfile(os.path.join(tform_dir, s + '.h5')) for s in section_list})
@@ -186,6 +185,7 @@ def optimize_main(section_list):
         cost0.update(cost)
         cost = cost0
     with open(os.path.join(tform_dir, 'residue.csv'), 'w') as f:
+    #with os.open(os.path.join(tform_dir, 'residue.csv'), os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
         mnames = sorted(list(cost.keys()))
         for key in mnames:
             val = cost[key]
@@ -224,6 +224,7 @@ def offset_bbox_main():
     bbox_union_new = bbox_union + np.tile(offset, 2)
     if not os.path.isfile(outname):
         with open(outname, 'w') as f:
+        #with os.open(outname, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
             f.write('\t'.join([str(s) for s in offset]))
     logger.warning(f'bbox offset: {tuple(bbox_union)} -> {tuple(bbox_union_new)}')
     logging.terminate_logger(*logger_info)
@@ -452,7 +453,7 @@ if __name__ == '__main__':
         time_region.track_time('align_main.matching', time.time() - start_matching)
     elif mode == 'optimization':
         os.makedirs(tform_dir, exist_ok=True)
-        optimize_main(None)
+        align_optimize_main(None)
     elif mode == 'rendering':
         start_rendering =time.time() 
         if align_config.pop('offset_bbox', True):

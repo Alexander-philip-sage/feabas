@@ -543,11 +543,16 @@ def align_two_thumbnails(img0, img1, outname, mask0=None, mask1=None, **kwargs):
         if save_feature_match:
             xy0, xy1, weight = mtch0
             os.makedirs(feature_match_dir, exist_ok=True)
-            with h5py.File(feature_matchname, 'w') as f:
+            #with open(feature_matchname, 'w') as python_file_descriptor:
+            #with os.open(feature_matchname, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as python_file_descriptor:
+            with h5py.File(feature_matchname, 'w') as f:            
                 f.create_dataset('xy0', data=xy0, compression="gzip")
                 f.create_dataset('xy1', data=xy1, compression="gzip")
                 f.create_dataset('weight', data=weight, compression="gzip")
                 f.create_dataset('resolution', data=resolution)
+                f.flush()
+                #python_file_descriptor.flush()
+                #os.fsync(python_file_descriptor.fileno())
     pmcc_scale = np.full(2, block_match_settings.get('scale', 1.0))
     mtch0 = _scale_matches(mtch0, pmcc_scale)
     mtch1 = match_two_thumbnails_pmcc(img0, img1, mask0=mask0, mask1=mask1,
@@ -558,12 +563,16 @@ def align_two_thumbnails(img0, img1, outname, mask0=None, mask1=None, **kwargs):
     else:
         xy0, xy1, weight = mtch1
         os.makedirs(os.path.dirname(outname), exist_ok=True)
-        with h5py.File(outname, 'w') as f:
+        #with os.open(outname, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as python_file_descriptor:
+        #with open(outname, 'w') as python_file_descriptor:
+        with h5py.File(outname, 'w') as f:            
             f.create_dataset('xy0', data=xy0, compression="gzip")
             f.create_dataset('xy1', data=xy1, compression="gzip")
             f.create_dataset('weight', data=weight, compression="gzip")
             f.create_dataset('resolution', data=resolution)
             f.flush()
+            #python_file_descriptor.flush()
+            #os.fsync(python_file_descriptor.fileno())            
         return xy0.shape[0]
 
 

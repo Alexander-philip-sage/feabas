@@ -631,6 +631,7 @@ class StaticImageLoader(AbstractImageLoader):
 
     def to_coordinate_file(self, filename, **kwargs):
         delimiter = kwargs.get('delimiter', '\t')
+        #with os.open(filename, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
         with open(filename, 'w') as f:
             f.write(f'{{ROOT_DIR}}{delimiter}{self.imgrootdir}\n')
             f.write(f'{{RESOLUTION}}{delimiter}{self.resolution}\n')

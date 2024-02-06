@@ -778,6 +778,8 @@ class Mesh:
         else:
             if '.h5' not in fname:
                 fname = os.path.join(fname, self.name + '.h5')
+            #with open(fname, 'w') as python_file_descriptor:
+            #with os.open(fname, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as python_file_descriptor:
             with h5py.File(fname, 'w') as f:
                 for key, val in out.items():
                     if val is None:
@@ -789,6 +791,8 @@ class Mesh:
                     else:
                         _ = f.create_dataset(prefix+key, data=val, compression="gzip")
                 f.flush()
+                #python_file_descriptor.flush()
+                #os.fsync(python_file_descriptor.fileno())
 
     def copy(self, deep=False, save_material=True, override_dict=None):
         if override_dict is None:
