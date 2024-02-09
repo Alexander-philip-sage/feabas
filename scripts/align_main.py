@@ -12,6 +12,7 @@ from feabas.time_region import time_region
 from feabas import config, logging
 import feabas.constant as const
 from feabas.time_region import timer_func
+from feabas.common import wait_for_file_buffer
 
 def generate_mesh_from_mask(mask_names, outname, **kwargs):
     if os.path.isfile(outname):
@@ -184,15 +185,16 @@ def align_optimize_main(section_list):
             os.fsync(f.fileno())
         cost0.update(cost)
         cost = cost0
-    with open(os.path.join(tform_dir, 'residue.csv'), 'w') as f:
-    #with os.open(os.path.join(tform_dir, 'residue.csv'), os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
+    residue_fpath = os.path.join(tform_dir, 'residue.csv')
+    with open(residue_fpath, 'w') as f:
+    #with os.open(residue_fpath, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
         mnames = sorted(list(cost.keys()))
         for key in mnames:
             val = cost[key]
             f.write(f'{key}, {val[0]}, {val[1]}\n')
         f.flush()
         os.fsync(f.fileno())
-
+    wait_for_file_buffer(residue_fpath)
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
@@ -226,6 +228,7 @@ def offset_bbox_main():
         with open(outname, 'w') as f:
         #with os.open(outname, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
             f.write('\t'.join([str(s) for s in offset]))
+        wait_for_file_buffer(outname)
     logger.warning(f'bbox offset: {tuple(bbox_union)} -> {tuple(bbox_union_new)}')
     logging.terminate_logger(*logger_info)
 
@@ -512,3 +515,4 @@ if __name__ == '__main__':
         logging.terminate_logger(*logger_info)
     print(datetime.datetime.now(), "finished align.", mode)
     time_region.log_summary()   
+    time.sleep(120)

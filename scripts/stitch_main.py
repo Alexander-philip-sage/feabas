@@ -273,7 +273,7 @@ def stitch_switchboard(mode):
         stitch_configs_render.setdefault('meta_dir', render_meta_dir)
         print(f"image_outdir {image_outdir}")
         stitch_render_main(tform_list, image_outdir, **stitch_configs_render)
-
+        time.sleep(120)
     elif mode in ['optimization', 'optimize']:
         print("starting optimize")
         stitch_configs_opt = stitch_configs['optimization']
@@ -369,3 +369,4 @@ if __name__ == '__main__':
         stitch_switchboard(mode)
     print(datetime.datetime.now(), "finish mode stitch", args.mode)
     time_region.log_summary()
+    time.sleep(120)

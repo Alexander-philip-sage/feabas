@@ -20,6 +20,7 @@ from feabas.optimizer import SLM
 import feabas.constant as const
 from feabas.common import str_to_numpy_ascii, Match, rearrange_section_order
 from feabas.config import DEFAULT_RESOLUTION
+from feabas.common import wait_for_file_buffer
 
 
 def read_matches_from_h5(match_name, target_resolution=None):
@@ -133,6 +134,7 @@ def match_section_from_initial_matches(match_name, meshes, loaders, out_dir, con
             f.flush()
             #python_file_descriptor.flush()
             #os.fsync(python_file_descriptor.fileno())
+        wait_for_file_buffer(outname)
         return len(xy0)
 
 

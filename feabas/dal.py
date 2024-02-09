@@ -14,7 +14,7 @@ import tensorstore as ts
 
 from feabas import common, caching
 from feabas.config import DEFAULT_RESOLUTION
-
+from feabas.common import wait_for_file_buffer
 
 # bbox :int: [xmin, ymin, xmax, ymax]
 
@@ -388,7 +388,7 @@ class AbstractImageLoader(ABC):
             img = common.imread(imgpath, flag=cv2.IMREAD_UNCHANGED)
         self._read_counter += 1
         if img is None:
-            raise RuntimeError(f'Image file {imgpath} not valid!')
+            raise RuntimeError(f'Image file {imgpath} not valid!\nnumber of channels {number_of_channels} dtype {dtype}')
         if dtype is None:
             dtype = img.dtype
         while (len(img.shape) > 2) and (img.shape[-1] == 1):
@@ -641,7 +641,7 @@ class StaticImageLoader(AbstractImageLoader):
                 f.write(line+'\n')
             f.flush()
             os.fsync(f.fileno())
-
+        wait_for_file_buffer(filename)
 
     def _cache_image(self, fileid, img=None, **kwargs):
         if not self._use_cache:

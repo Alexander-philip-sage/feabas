@@ -459,4 +459,4 @@ if __name__ == '__main__':
         logging.terminate_logger(*logger_info)
     print(datetime.datetime.now(), "finish mode thumbnail.", args.mode)
     time_region.log_summary()
-
+    time.sleep(120)

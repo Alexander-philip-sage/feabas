@@ -25,6 +25,7 @@ from feabas import common, caching
 from feabas.spatial import scale_coordinates
 import feabas.constant as const
 from feabas.config import DEFAULT_RESOLUTION, general_settings
+from feabas.common import wait_for_file_buffer
 
 class Stitcher:
     """
@@ -159,7 +160,7 @@ class Stitcher:
             f.flush()
             #python_file_descriptor.flush()
             #os.fsync(python_file_descriptor.fileno())
-
+        wait_for_file_buffer(fname)
     def load_matches_from_h5(self, fname, check_order=False):
         with h5py.File(fname, 'r') as f:
             match_cnt = 0

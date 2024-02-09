@@ -4,16 +4,55 @@ import importlib
 import os
 
 import numpy as np
+import time
 from scipy import sparse
 from scipy.ndimage import gaussian_filter1d
 import scipy.sparse.csgraph as csgraph
+import h5py
 
 from feabas.config import DEFAULT_RESOLUTION
 
 
 Match = namedtuple('Match', ('xy0', 'xy1', 'weight'))
 
-
+def h5_wait(h5file, wait, max_wait):
+    waited = 0
+    while True:
+        try:
+            h5f = h5py.File(h5file,'r')
+            break
+        except FileNotFoundError:
+            print('\nError: HDF5 File not found\n')
+            return False
+        except OSError:   
+            if waited < max_wait:
+                print(f'Warning: HDF5 File locked, sleeping {wait} seconds...')
+                time.sleep(wait) 
+                waited += wait  
+            else:
+                print(f'\nWaited too long= {waited} secs, exiting...\n')
+                return False
+    h5f.close()
+    return True
+def file_wait(fname, wait, max_wait):
+    waited = 0
+    while waited < max_wait:
+        if (not os.path.exists(fname)) or (not os.path.isfile(fname)):
+            time.sleep(wait)
+            waited += wait
+        else:
+            return True
+    return False
+def wait_for_file_buffer(fname):
+    ext = fname.split(".")[1]
+    max_wait = 60*5
+    wait = 30
+    time.sleep(wait)
+    if ext=='h5':
+        file_ready = h5_wait(fname, wait, max_wait)
+    else:
+        file_ready = file_wait(fname, wait, max_wait)
+    return file_ready 
 def imread(path, **kwargs):
     flag = kwargs.get('flag', cv2.IMREAD_UNCHANGED)
     if path.startswith('gs://'):
