@@ -36,6 +36,7 @@ def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
             for job in jobs:
                 job.result()
     logger.info('mipmapping generated.')
+    time.sleep(120)
 
 
 def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, **kwargs):

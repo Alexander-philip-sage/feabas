@@ -113,6 +113,7 @@ def generate_mesh_main():
                 job.result()
     logger.info('meshes generated.')
     logging.terminate_logger(*logger_info)
+    
 
 
 def match_main(match_list):
@@ -446,6 +447,7 @@ if __name__ == '__main__':
         start_matching =time.time()
         os.makedirs(match_dir, exist_ok=True)
         generate_mesh_main()
+        time.sleep(120)
         match_list = sorted(glob.glob(os.path.join(thumb_match_dir, '*.h5')))
         assert len(match_list)>0, f"must find more than one match in {os.path.abspath(thumb_match_dir)}"
         match_list = match_list[indx]
