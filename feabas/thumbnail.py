@@ -552,7 +552,7 @@ def align_two_thumbnails(img0, img1, outname, mask0=None, mask1=None, **kwargs):
                 f.flush()
                 #python_file_descriptor.flush()
                 #os.fsync(python_file_descriptor.fileno())
-            common.wait_for_file_buffer(feature_matchname)
+            common.wait_for_file_buffer(feature_matchname, 'thumbnail.align_two_thumbnails')
     pmcc_scale = np.full(2, block_match_settings.get('scale', 1.0))
     mtch0 = _scale_matches(mtch0, pmcc_scale)
     mtch1 = match_two_thumbnails_pmcc(img0, img1, mask0=mask0, mask1=mask1,
@@ -573,7 +573,7 @@ def align_two_thumbnails(img0, img1, outname, mask0=None, mask1=None, **kwargs):
             f.flush()
             #python_file_descriptor.flush()
             #os.fsync(python_file_descriptor.fileno())   
-        common.wait_for_file_buffer(outname)         
+        common.wait_for_file_buffer(outname, 'thumbnail.align_two_thumbnails')         
         return xy0.shape[0]
 
 

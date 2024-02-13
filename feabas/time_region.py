@@ -11,6 +11,7 @@ class TimeRegion():
     def __init__(self):
         self.region_time = defaultdict(lambda: 0)
         self.region_call_count= defaultdict(lambda: 0)
+        self.waiting_for_file= defaultdict(lambda: 0)
         self.log_summary_called = False
         logging.getLogger().setLevel(logging.INFO)
     def log_summary(self):
@@ -33,6 +34,12 @@ class TimeRegion():
                     logging.info(reg+":tmg: calls {} total time {} time per call {}".format(call_count, 
                         round(total_time,3), 
                         round(total_time/call_count,6)))
+            functions_waited = list(self. waiting_for_file.keys())
+            if len(functions_waited)==0:
+                logging.info("waiting_for_file: no functions tracked waiting for file buffer to flush")
+            for function in functions_waited:
+                if self.waiting_for_file[function]>0:
+                    logging.info(f"{function} waited for {self.waiting_for_file[function]}")
             try:
                 csv_path = os.path.split(logging.getLoggerClass().root.handlers[0].baseFilename)[0]
             except:
@@ -46,6 +53,10 @@ class TimeRegion():
         #    logstr = "not reporting log summary rank {}".format( RANK)
         #    logging.info(logstr)
         #    print(logstr)
+    def track_file_wait(self, name: str, time_waited_s:int):
+        '''times are expected in s '''
+        if RANK is None or RANK==0:
+            self.waiting_for_file[name]+= time_waited_s
     def track_time(self,name: str, time_passed_s: int):
         '''times are expected in s '''
         if RANK is None or RANK==0:

@@ -160,7 +160,7 @@ class Stitcher:
             f.flush()
             #python_file_descriptor.flush()
             #os.fsync(python_file_descriptor.fileno())
-        wait_for_file_buffer(fname)
+        wait_for_file_buffer(fname,'stitcher.save_to_h5' )
     def load_matches_from_h5(self, fname, check_order=False):
         with h5py.File(fname, 'r') as f:
             match_cnt = 0

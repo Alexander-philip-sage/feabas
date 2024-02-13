@@ -641,7 +641,7 @@ class StaticImageLoader(AbstractImageLoader):
                 f.write(line+'\n')
             f.flush()
             os.fsync(f.fileno())
-        wait_for_file_buffer(filename)
+        wait_for_file_buffer(filename, 'dal.to_coordinate_file')
 
     def _cache_image(self, fileid, img=None, **kwargs):
         if not self._use_cache:

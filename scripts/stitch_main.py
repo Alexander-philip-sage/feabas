@@ -12,6 +12,8 @@ import feabas
 from feabas import config, logging, dal
 from feabas.time_region import time_region
 from feabas.time_region import timer_func
+from feabas import common
+
 def match_one_section(coordname, outname, **kwargs):
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
@@ -240,6 +242,7 @@ def stitch_render_main(tform_list, out_dir, **kwargs):
                 os.makedirs(sec_outdir, exist_ok=True)
                 out_prefix = os.path.join(sec_outdir, sec_name)
             num_rendered = render_one_section(tname, out_prefix, meta_name=meta_name, **kwargs)
+            common.wait_for_pngs(sec_outdir, 'stitch_render_main')
             logger.info(f'{sec_name}: {num_rendered} tiles | {(time.time()-t0)/60} min')
         except Exception as err:
             logger.error(f'{sec_name}: {err}')
@@ -273,7 +276,7 @@ def stitch_switchboard(mode):
         stitch_configs_render.setdefault('meta_dir', render_meta_dir)
         print(f"image_outdir {image_outdir}")
         stitch_render_main(tform_list, image_outdir, **stitch_configs_render)
-        time.sleep(120)
+        time.sleep(180)
     elif mode in ['optimization', 'optimize']:
         print("starting optimize")
         stitch_configs_opt = stitch_configs['optimization']
@@ -369,4 +372,4 @@ if __name__ == '__main__':
         stitch_switchboard(mode)
     print(datetime.datetime.now(), "finish mode stitch", args.mode)
     time_region.log_summary()
-    time.sleep(120)
+    time.sleep(180)

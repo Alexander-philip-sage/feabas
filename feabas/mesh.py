@@ -793,7 +793,7 @@ class Mesh:
                 f.flush()
                 #python_file_descriptor.flush()
                 #os.fsync(python_file_descriptor.fileno())
-            common.wait_for_file_buffer(fname)
+            common.wait_for_file_buffer(fname, 'mesh.save_to_h5')
     def copy(self, deep=False, save_material=True, override_dict=None):
         if override_dict is None:
             override_dict = {}

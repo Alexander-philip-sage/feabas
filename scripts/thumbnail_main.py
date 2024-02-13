@@ -9,6 +9,7 @@ import time, datetime
 from feabas.time_region import time_region
 from feabas import config, logging
 from feabas.time_region import timer_func
+from feabas import common
 
 @timer_func
 def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
@@ -36,7 +37,7 @@ def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
             for job in jobs:
                 job.result()
     logger.info('mipmapping generated.')
-    time.sleep(120)
+    time.sleep(180)
 
 
 def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, **kwargs):
@@ -97,7 +98,9 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
                 jobs.append(job)
             for job in jobs:
                 job.result()
-        logger.info('thumbnails generated.')
+        
+    common.wait_for_pngs(out_dir, 'thumbnail_downsample.generate_thumbnails')
+    logger.info('thumbnails generated.')
     return updated
 
 @timer_func
@@ -139,7 +142,6 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
 def save_mask_for_one_sections(mesh_file, out_name, scale, **kwargs):
     from feabas.stitcher import MontageRenderer
     import numpy as np
-    from feabas import common
     img_dir = kwargs.get('img_dir', None)
     fillval = kwargs.get('fillval', 0)
     mask_erode = kwargs.get('mask_erode', 0)
@@ -460,4 +462,4 @@ if __name__ == '__main__':
         logging.terminate_logger(*logger_info)
     print(datetime.datetime.now(), "finish mode thumbnail.", args.mode)
     time_region.log_summary()
-    time.sleep(120)
+    time.sleep(180)

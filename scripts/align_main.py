@@ -195,7 +195,7 @@ def align_optimize_main(section_list):
             f.write(f'{key}, {val[0]}, {val[1]}\n')
         f.flush()
         os.fsync(f.fileno())
-    wait_for_file_buffer(residue_fpath)
+    wait_for_file_buffer(residue_fpath, 'align_main.align_optimize_main')
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
@@ -229,7 +229,7 @@ def offset_bbox_main():
         with open(outname, 'w') as f:
         #with os.open(outname, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
             f.write('\t'.join([str(s) for s in offset]))
-        wait_for_file_buffer(outname)
+        wait_for_file_buffer(outname, 'align_main.offset_bbox_main')
     logger.warning(f'bbox offset: {tuple(bbox_union)} -> {tuple(bbox_union_new)}')
     logging.terminate_logger(*logger_info)
 
@@ -447,7 +447,7 @@ if __name__ == '__main__':
         start_matching =time.time()
         os.makedirs(match_dir, exist_ok=True)
         generate_mesh_main()
-        time.sleep(120)
+        time.sleep(180)
         match_list = sorted(glob.glob(os.path.join(thumb_match_dir, '*.h5')))
         assert len(match_list)>0, f"must find more than one match in {os.path.abspath(thumb_match_dir)}"
         match_list = match_list[indx]
@@ -517,4 +517,4 @@ if __name__ == '__main__':
         logging.terminate_logger(*logger_info)
     print(datetime.datetime.now(), "finished align.", mode)
     time_region.log_summary()   
-    time.sleep(120)
+    time.sleep(180)

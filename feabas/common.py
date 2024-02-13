@@ -1,7 +1,7 @@
 from collections import namedtuple
 import cv2
 import importlib
-import os
+import os, glob
 
 import numpy as np
 import time
@@ -11,47 +11,66 @@ import scipy.sparse.csgraph as csgraph
 import h5py
 
 from feabas.config import DEFAULT_RESOLUTION
-
+from feabas.time_region import time_region
 
 Match = namedtuple('Match', ('xy0', 'xy1', 'weight'))
 
 def h5_wait(h5file, wait, max_wait):
-    waited = 0
+    time.sleep(wait)
+    waited = wait
     while True:
         try:
             h5f = h5py.File(h5file,'r')
             break
         except FileNotFoundError:
             print('\nError: HDF5 File not found\n')
-            return False
+            return False, waited
         except OSError:   
             if waited < max_wait:
                 print(f'Warning: HDF5 File locked, sleeping {wait} seconds...')
                 time.sleep(wait) 
                 waited += wait  
             else:
-                print(f'\nWaited too long= {waited} secs, exiting...\n')
-                return False
+                print(f"h5_wait failed in {waited}s. looking for file {h5file}")
+                return False, waited
     h5f.close()
-    return True
+    return True, waited
+
+def wait_for_pngs(out_dir,calling_func, wait=30):
+    time.sleep(wait)
+    waited =wait
+    total_wait = 5*60
+    while (total_wait>waited):
+        if len(glob.glob(os.path.join(out_dir, "*.png")))==0:
+            time.sleep(wait)
+            waited += wait
+        else:
+            time_region.track_file_wait(calling_func, total_wait)
+            return True
+    print(f"wait_for_pngs failed in {total_wait}s. looking for pngs in {out_dir}")
+    time_region.track_file_wait(calling_func, waited)
+    return False
+
 def file_wait(fname, wait, max_wait):
-    waited = 0
+    time.sleep(wait)
+    waited = wait
     while waited < max_wait:
         if (not os.path.exists(fname)) or (not os.path.isfile(fname)):
             time.sleep(wait)
             waited += wait
         else:
-            return True
-    return False
-def wait_for_file_buffer(fname):
+            return True, waited
+    print(f"file_wait failed in {waited}s. looking for file {fname}")
+    return False, waited
+def wait_for_file_buffer(fname, calling_func):
     ext = fname.split(".")[1]
     max_wait = 60*5
     wait = 30
-    time.sleep(wait)
     if ext=='h5':
-        file_ready = h5_wait(fname, wait, max_wait)
+        file_ready, waited = h5_wait(fname, wait, max_wait)
     else:
-        file_ready = file_wait(fname, wait, max_wait)
+        file_ready, waited = file_wait(fname, wait, max_wait)
+    time_region.track_file_wait(calling_func, waited)
     return file_ready 
 def imread(path, **kwargs):
     flag = kwargs.get('flag', cv2.IMREAD_UNCHANGED)

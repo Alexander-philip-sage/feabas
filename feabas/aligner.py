@@ -134,7 +134,7 @@ def match_section_from_initial_matches(match_name, meshes, loaders, out_dir, con
             f.flush()
             #python_file_descriptor.flush()
             #os.fsync(python_file_descriptor.fileno())
-        wait_for_file_buffer(outname)
+        wait_for_file_buffer(outname, 'aligner.match_section_from_initial_matches')
         return len(xy0)
 
 

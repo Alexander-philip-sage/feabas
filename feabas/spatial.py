@@ -604,7 +604,7 @@ class Geometry:
             f.flush()
             #python_file_descriptor.flush()
             #os.fsync(python_file_descriptor.fileno())
-        common.wait_for_file_buffer(h5name)
+        common.wait_for_file_buffer(h5name, 'spatial.save_to_h5')
         
     def add_regions(self, regions, mode='u', pos=None):
         """
