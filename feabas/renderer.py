@@ -731,7 +731,7 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
         jobs = []
         if num_workers<32:
             print(f"running render_whole_mesh with {num_workers} workers")
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             if driver == 'image':
                 for msh, bbox, fnames in zip(submeshes, bboxes_list, filenames_list):
                     if msh is None:
@@ -970,7 +970,7 @@ class VolumeRenderer:
             actual_num_workers = min(num_workers, len(render_seriers))
             if actual_num_workers > 1:
                 jobs = []
-                with ProcessPoolExecutor(max_workers=actual_num_workers, mp_context=get_context('spawn')) as executor:
+                with ProcessPoolExecutor(max_workers=actual_num_workers, mp_context=get_context('fork')) as executor:
                     for bkw in render_seriers:
                         bkw.update(kwargs)
                         job = executor.submit(subprocess_render_partial_ts_slab, **bkw)

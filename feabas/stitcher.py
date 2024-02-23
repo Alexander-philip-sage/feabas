@@ -315,7 +315,7 @@ class Stitcher:
         num_new_matches = 0
         err_raised = False
         #print("stitch.match using num_workers",num_workers)
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
                 ovlp_g = overlaps[idx0:idx1] # global indices of overlaps
                 mapper, ovlp = np.unique(ovlp_g, return_inverse=True, axis=None)

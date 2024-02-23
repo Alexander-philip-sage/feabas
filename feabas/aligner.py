@@ -298,7 +298,7 @@ class Stack:
             if len(anchored_meshes) > 0:
                 cached_M = Mesh.combine_mesh(anchored_meshes, save_material=True)
                 outname = os.path.join(self._mesh_out_dir, cached_name+'.h5')
-                cached_M.save_to_h5(outname, vertex_flags=const.MESH_GEARS, save_material=True)
+                cached_M.save_to_h5(outname, vertex_flags=const.MESH_GEARS, save_material=True, wait_for_buffer=False)
         for matchname in rel_match_names:
             self.dump_link(matchname)
 
@@ -397,6 +397,9 @@ class Stack:
         start_loc = kwargs.pop('start_loc', 'L') # L or R or M
         window_size = kwargs.get('window_size', None)
         func_name = 'optimize_slide_window'
+        if self.num_sections==0:
+            print("self.num_sections==0")
+            return {}
         if kwargs.get('logger', None) is not None:
             self._logger = kwargs['logger']
         if (window_size is None) or window_size > self.num_sections:
@@ -428,6 +431,9 @@ class Stack:
             init_idx0 = (self.num_sections - window_size)//2
         costs = {}
         if start_loc == 'L':
+            if (window_size-buffer_size)==0:
+                print("window_size-buffer_size==0")
+                return costs
             indices0 = np.arange(init_idx0, self.num_sections, window_size-buffer_size)
             for idx0 in indices0:
                 seclst = self.section_list[init_idx0:(idx0+window_size)]
@@ -484,7 +490,7 @@ class Stack:
             kwargs_r['start_loc'] = 'R'
             if num_workers > 1:
                 jobs = []
-                with ProcessPoolExecutor(max_workers=2, mp_context=get_context('spawn')) as executor:
+                with ProcessPoolExecutor(max_workers=2, mp_context=get_context('fork')) as executor:
                     jobs.append(executor.submit(Stack.subprocess_optimize_stack, init_dict_l, func_name, **kwargs_l))
                     jobs.append(executor.submit(Stack.subprocess_optimize_stack, init_dict_r, func_name, **kwargs_r))
                     for job in as_completed(jobs):

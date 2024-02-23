@@ -11,7 +11,7 @@ class TimeRegion():
     def __init__(self):
         self.region_time = defaultdict(lambda: 0)
         self.region_call_count= defaultdict(lambda: 0)
-        self.waiting_for_file= defaultdict(lambda: 0)
+        self.waiting_for_file= defaultdict(list)
         self.log_summary_called = False
         logging.getLogger().setLevel(logging.INFO)
     def log_summary(self):
@@ -38,7 +38,7 @@ class TimeRegion():
             if len(functions_waited)==0:
                 logging.info("waiting_for_file: no functions tracked waiting for file buffer to flush")
             for function in functions_waited:
-                if self.waiting_for_file[function]>0:
+                if len(self.waiting_for_file[function])>0:
                     logging.info(f"{function} waited for {self.waiting_for_file[function]}")
             try:
                 csv_path = os.path.split(logging.getLoggerClass().root.handlers[0].baseFilename)[0]
@@ -56,7 +56,7 @@ class TimeRegion():
     def track_file_wait(self, name: str, time_waited_s:int):
         '''times are expected in s '''
         if RANK is None or RANK==0:
-            self.waiting_for_file[name]+= time_waited_s
+            self.waiting_for_file[name].append(time_waited_s)
     def track_time(self,name: str, time_passed_s: int):
         '''times are expected in s '''
         if RANK is None or RANK==0:

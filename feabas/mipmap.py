@@ -274,7 +274,7 @@ def generate_target_tensorstore_scale(metafile, mip=None, **kwargs):
         indices = np.unique(indices).astype(np.uint32)
         jobs = []
         out_spec = None
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for idx0, idx1 in zip(indices[:-1], indices[1:]):
                 idx0, idx1 = int(idx0), int(idx1)
                 bbox_t = bboxes[idx0:idx1]

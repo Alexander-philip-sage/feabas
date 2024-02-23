@@ -753,7 +753,7 @@ class Mesh:
 
 
     def save_to_h5(self, fname, vertex_flags=(const.MESH_GEAR_INITIAL, const.MESH_GEAR_MOVING),
-                   override_dict=None, **kwargs):
+                   override_dict=None, wait_for_buffer=True, **kwargs):
         if override_dict is None:
             override_dict = {}
         prefix = kwargs.get('prefix', '')
@@ -793,7 +793,8 @@ class Mesh:
                 f.flush()
                 #python_file_descriptor.flush()
                 #os.fsync(python_file_descriptor.fileno())
-            common.wait_for_file_buffer(fname, 'mesh.save_to_h5')
+            if wait_for_buffer:
+                common.wait_for_file_buffer(fname, 'mesh.save_to_h5')
     def copy(self, deep=False, save_material=True, override_dict=None):
         if override_dict is None:
             override_dict = {}

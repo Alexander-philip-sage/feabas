@@ -16,14 +16,13 @@ from feabas.time_region import time_region
 Match = namedtuple('Match', ('xy0', 'xy1', 'weight'))
 
 def h5_wait(h5file, wait, max_wait):
-    time.sleep(wait)
-    waited = wait
+    waited = 0
     while True:
         try:
             h5f = h5py.File(h5file,'r')
             break
         except FileNotFoundError:
-            print('\nError: HDF5 File not found\n')
+            print(f'\nError: HDF5 File not found\n{h5file}')
             return False, waited
         except OSError:   
             if waited < max_wait:
@@ -36,24 +35,22 @@ def h5_wait(h5file, wait, max_wait):
     h5f.close()
     return True, waited
 
-def wait_for_pngs(out_dir,calling_func, wait=30):
-    time.sleep(wait)
-    waited =wait
+def wait_for_pngs(out_dir,calling_func, ct_pngs, wait=30):
+    waited =0
     total_wait = 5*60
     while (total_wait>waited):
-        if len(glob.glob(os.path.join(out_dir, "*.png")))==0:
+        if len(glob.glob(os.path.join(out_dir, "*.png")))<ct_pngs:
             time.sleep(wait)
             waited += wait
         else:
             time_region.track_file_wait(calling_func, total_wait)
             return True
-    print(f"wait_for_pngs failed in {total_wait}s. looking for pngs in {out_dir}")
+    print(f"wait_for_pngs failed in {total_wait}s. looking for {ct_pngs} pngs in {out_dir}")
     time_region.track_file_wait(calling_func, waited)
     return False
 
 def file_wait(fname, wait, max_wait):
-    time.sleep(wait)
-    waited = wait
+    waited = 0
     while waited < max_wait:
         if (not os.path.exists(fname)) or (not os.path.isfile(fname)):
             time.sleep(wait)

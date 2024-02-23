@@ -30,7 +30,7 @@ def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
         target_func = partial(mip_map_one_section, img_dir=img_dir,
                                 max_mip=max_mip, num_workers=1, **kwargs)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 job = executor.submit(target_func, sname)
                 jobs.append(job)
@@ -55,7 +55,7 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, **kwargs):
     else:
         target_func = parallel_within_section(mipmap.generate_tensorstore_scales, mips=tgt_mips, **kwargs)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for metafile in meta_list:
                 job = executor.submit(target_func, metafile)
                 jobs.append(job)
@@ -87,7 +87,7 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
             common.imwrite(outname, img_out)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 outname = os.path.join(out_dir, sname + '.png')
                 if os.path.isfile(outname):
@@ -98,8 +98,8 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
                 jobs.append(job)
             for job in jobs:
                 job.result()
-        
-    common.wait_for_pngs(out_dir, 'thumbnail_downsample.generate_thumbnails')
+    logger.info(f'waiting for {len(secnames)} files to appear in {out_dir} ')
+    common.wait_for_pngs(out_dir, 'thumbnail_downsample.generate_thumbnails', len(secnames))
     logger.info('thumbnails generated.')
     return updated
 
@@ -124,7 +124,7 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
             common.imwrite(outname, img_out)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for meta_name in meta_list:
                 sname = os.path.basename(meta_name).replace('.json', '')
                 outname = os.path.join(out_dir, sname + '.png')
@@ -186,7 +186,7 @@ def generate_thumbnail_masks(mesh_dir, out_dir, seclist=None, **kwargs):
             target_func(mname, outname)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for mname in mesh_list:
                 sname = os.path.basename(mname).replace('.h5', '')
                 outname = os.path.join(out_dir, sname + '.png')
@@ -214,6 +214,7 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
     logger_info = kwargs.get('logger', None)
     logger = logging.get_logger(logger_info)
     prepared_cache = caching.CacheFIFO(maxlen=cache_size)
+    all_outnames = []
     for pname in pairnames:
         try:
             sname0_ext, sname1_ext = pname
@@ -263,8 +264,11 @@ def align_thumbnail_pairs(pairnames, image_dir, out_dir, **kwargs):
                 minfo1 = thumbnail.prepare_image(img1, mask=mask1, **feature_match_settings)
                 prepared_cache[sname1] = minfo1
             thumbnail.align_two_thumbnails(minfo0, minfo1, outname, **kwargs)
+            all_outnames.append(outname)
         except Exception as err:
             logger.error(f'{pname}: error {err}')
+    for outname in all_outnames:
+        common.wait_for_file_buffer(outname,"align_thumbnail_pairs" )
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Align thumbnails")
@@ -450,7 +454,7 @@ if __name__ == '__main__':
             indx_j = np.linspace(0, len(pairnames), num=Njobs+1, endpoint=True)
             indx_j = np.unique(np.round(indx_j).astype(np.int32))
             jobs = []
-            with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+            with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
                 for idx0, idx1 in zip(indx_j[:-1], indx_j[1:]):
                     prnm = pairnames[idx0:idx1]
                     job = executor.submit(target_func, pairnames=prnm)

@@ -119,7 +119,7 @@ if __name__ == '__main__':
                           out_resolution=resolution, bbox=bbox)
     jobs = []
     imglist = [os.path.join(src_dir, os.path.basename(s).replace('.h5', args.ext)) for s in tlist]
-    with ProcessPoolExecutor(max_workers=args.worker, mp_context=get_context('spawn')) as executor:
+    with ProcessPoolExecutor(max_workers=args.worker, mp_context=get_context('fork')) as executor:
         for tname, mname in zip(tlist, imglist):
             if not os.path.isfile(mname):
                 continue

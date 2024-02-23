@@ -99,7 +99,7 @@ def generate_mesh_main():
         material_table = material_table.save_to_json(jsonname=None)
         target_func = partial(generate_mesh_from_mask, material_table=material_table, **mesh_config)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 mask_names = [(os.path.join(alt_mask_dir, sname + '.json'), alt_mask_resolution),
                               (os.path.join(alt_mask_dir, sname + '.txt'), alt_mask_resolution),
@@ -170,32 +170,37 @@ def align_optimize_main(section_list):
     print("align_optimize_main: section_list", section_list)
     stk = Stack(section_list=section_list, mesh_dir=mesh_dir, match_dir=match_dir, mesh_out_dir=tform_dir, **stack_config)
     section_list = stk.section_list
-    stk.update_lock_flags({s: os.path.isfile(os.path.join(tform_dir, s + '.h5')) for s in section_list})
-    locked_flags = stk.locked_array
-    logger.info(f'{locked_flags.size} images| {np.sum(locked_flags)} references')
-    cost = stk.optimize_slide_window(optimize_rigid=True, optimize_elastic=True,
-        target_gear=const.MESH_GEAR_MOVING, **slide_window)
-    if os.path.isfile(os.path.join(tform_dir, 'residue.csv')):
-        cost0 = {}
-        with open(os.path.join(tform_dir, 'residue.csv'), 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                mn, dis0, dis1 = line.split(', ')
-                cost0[mn] = (float(dis0), float(dis1))
+    optimize_files_exist={s: os.path.isfile(os.path.join(tform_dir, s + '.h5')) for s in section_list}
+    stk.update_lock_flags(optimize_files_exist)
+    if sum(optimize_files_exist.values())!=len(optimize_files_exist.values()):
+        locked_flags = stk.locked_array
+        logger.info(f'{locked_flags.size} images| {np.sum(locked_flags)} references')
+        cost = stk.optimize_slide_window(optimize_rigid=True, optimize_elastic=True,
+            target_gear=const.MESH_GEAR_MOVING, **slide_window)
+        if os.path.isfile(os.path.join(tform_dir, 'residue.csv')):
+            cost0 = {}
+            with open(os.path.join(tform_dir, 'residue.csv'), 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    mn, dis0, dis1 = line.split(', ')
+                    cost0[mn] = (float(dis0), float(dis1))
+                f.flush()
+                os.fsync(f.fileno())
+            cost0.update(cost)
+            cost = cost0
+        residue_fpath = os.path.join(tform_dir, 'residue.csv')
+        with open(residue_fpath, 'w') as f:
+        #with os.open(residue_fpath, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
+            mnames = sorted(list(cost.keys()))
+            for key in mnames:
+                val = cost[key]
+                f.write(f'{key}, {val[0]}, {val[1]}\n')
             f.flush()
             os.fsync(f.fileno())
-        cost0.update(cost)
-        cost = cost0
-    residue_fpath = os.path.join(tform_dir, 'residue.csv')
-    with open(residue_fpath, 'w') as f:
-    #with os.open(residue_fpath, os.O_WRONLY|os.O_DIRECT|os.O_CREAT) as f:
-        mnames = sorted(list(cost.keys()))
-        for key in mnames:
-            val = cost[key]
-            f.write(f'{key}, {val[0]}, {val[1]}\n')
-        f.flush()
-        os.fsync(f.fileno())
-    wait_for_file_buffer(residue_fpath, 'align_main.align_optimize_main')
+        wait_for_file_buffer(residue_fpath, 'align_main.align_optimize_main')
+        [wait_for_file_buffer(os.path.join(tform_dir, s + '.h5'), "align_main.align_optimize_main") for s in section_list]
+    else:
+        logger.info(f'{section_list[0]} -> {section_list[-1]}: all sections already settled.')
     logger.info('finished')
     logging.terminate_logger(*logger_info)
 
@@ -319,7 +324,7 @@ def generate_aligned_mipmaps(render_dir, max_mip, meta_list=None, **kwargs):
         target_func = partial(mip_map_one_section, img_dir=render_dir,
                                 max_mip=max_mip, num_workers=1, **kwargs)
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for sname in secnames:
                 job = executor.submit(target_func, sname)
                 jobs.append(job)

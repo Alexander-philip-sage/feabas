@@ -121,23 +121,28 @@ def stitch_optmization_main(match_list, out_dir, **kwargs):
     kwargs['logger'] = logger_info[0]
     logger= logging.get_logger(logger_info[0])
     target_func = partial(optimize_one_section, **kwargs)
+    all_outnames = []
     if num_workers == 1:
         for matchname in match_list:
             outname = os.path.join(out_dir, os.path.basename(matchname))
             if os.path.isfile(outname):
                 continue
+            all_outnames.append(outname)
             target_func(matchname, outname)
     else:
         jobs = []
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for matchname in match_list:
                 outname = os.path.join(out_dir, os.path.basename(matchname))
                 if os.path.isfile(outname):
                     continue
+                all_outnames.append(outname)
                 job = executor.submit(target_func, matchname, outname)
                 jobs.append(job)
             for job in jobs:
                 job.result()
+    for outname in all_outnames:
+        common.wait_for_file_buffer(outname, "stitch_optmization_main")
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
@@ -183,7 +188,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
             metadata = {}
         jobs = []
         target_func = partial(MontageRenderer.subprocess_render_montages, **render_settings)
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('fork')) as executor:
             for bboxes, filenames, hits in zip(bboxes_list, filenames_list, hits_list):
                 init_args = renderer.init_args(selected=hits)
                 job = executor.submit(target_func, init_args, bboxes, filenames)
@@ -222,6 +227,7 @@ def stitch_render_main(tform_list, out_dir, **kwargs):
     if use_tensorstore:
         meta_dir = kwargs['meta_dir']
         os.makedirs(meta_dir, exist_ok=True)
+    sec_outdir_dirs = {}
     for tname in tform_list:
         t0 = time.time()
         sec_name = os.path.basename(tname).replace('.h5', '')
@@ -242,10 +248,13 @@ def stitch_render_main(tform_list, out_dir, **kwargs):
                 os.makedirs(sec_outdir, exist_ok=True)
                 out_prefix = os.path.join(sec_outdir, sec_name)
             num_rendered = render_one_section(tname, out_prefix, meta_name=meta_name, **kwargs)
-            common.wait_for_pngs(sec_outdir, 'stitch_render_main')
+            sec_outdir_dirs[sec_outdir] = num_rendered
             logger.info(f'{sec_name}: {num_rendered} tiles | {(time.time()-t0)/60} min')
         except Exception as err:
             logger.error(f'{sec_name}: {err}')
+    for sec_outdir, num_rendered in sec_outdir_dirs.items():
+        logger.info(f'waiting for {num_rendered} files to appear in {sec_outdir} ')
+        common.wait_for_pngs(sec_outdir, 'stitch_render_main', num_rendered)
     logger.info('finished.')
     logging.terminate_logger(*logger_info)
 
