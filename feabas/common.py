@@ -35,7 +35,8 @@ def h5_wait(h5file, wait, max_wait):
     h5f.close()
     return True, waited
 
-def wait_for_pngs(out_dir,calling_func, ct_pngs, wait=30):
+def wait_for_pngs(out_dir,calling_func, ct_pngs, wait=2):
+    '''ct_pngs: number of tiles rendered per section'''
     waited =0
     total_wait = 5*60
     while (total_wait>waited):
@@ -43,7 +44,7 @@ def wait_for_pngs(out_dir,calling_func, ct_pngs, wait=30):
             time.sleep(wait)
             waited += wait
         else:
-            time_region.track_file_wait(calling_func, total_wait)
+            time_region.track_file_wait(calling_func, waited)
             return True
     print(f"wait_for_pngs failed in {total_wait}s. looking for {ct_pngs} pngs in {out_dir}")
     time_region.track_file_wait(calling_func, waited)
@@ -62,7 +63,7 @@ def file_wait(fname, wait, max_wait):
 def wait_for_file_buffer(fname, calling_func):
     ext = fname.split(".")[1]
     max_wait = 60*5
-    wait = 30
+    wait = 2
     if ext=='h5':
         file_ready, waited = h5_wait(fname, wait, max_wait)
     else:
