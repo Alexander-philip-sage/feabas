@@ -34,11 +34,12 @@ def h5_wait(h5file, wait, max_wait):
                 return False, waited
     h5f.close()
     return True, waited
-
-def wait_for_pngs(out_dir,calling_func, ct_pngs, wait=2):
+MAX_FILE_WAIT = 1*60
+FILE_WAIT_STEP = 30
+def wait_for_pngs(out_dir,calling_func, ct_pngs, wait=FILE_WAIT_STEP):
     '''ct_pngs: number of tiles rendered per section'''
     waited =0
-    total_wait = 5*60
+    total_wait = MAX_FILE_WAIT
     while (total_wait>waited):
         if len(glob.glob(os.path.join(out_dir, "*.png")))<ct_pngs:
             time.sleep(wait)
@@ -62,8 +63,8 @@ def file_wait(fname, wait, max_wait):
     return False, waited
 def wait_for_file_buffer(fname, calling_func):
     ext = fname.split(".")[1]
-    max_wait = 60*5
-    wait = 2
+    max_wait = MAX_FILE_WAIT
+    wait = FILE_WAIT_STEP
     if ext=='h5':
         file_ready, waited = h5_wait(fname, wait, max_wait)
     else:
