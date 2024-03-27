@@ -138,12 +138,14 @@ def mip_map_one_section(sec_name, img_dir, max_mip, **kwargs):
         n_tile = mip_one_level(src_dir, out_dir, output_format=ext_out,
                                       downsample=2, **kwargs)
         if n_tile is None:
+            updated = False
             break
         if n_tile > 0:
             updated = True
         num_tiles.append(abs(n_tile))
     if updated:
         logger.info(f'{sec_name}: number of tiles {num_tiles} | {(time.time()-t0)/60} min')
+    return {sec_name: updated}
 
 
 def create_thumbnail(src_dir, outname=None, downsample=4, highpass=True, **kwargs):
@@ -284,7 +286,7 @@ def generate_target_tensorstore_scale(metafile, mip=None, **kwargs):
                 out_spec = job.result()
     mipmaps.update({mip: out_spec})
     if write_to_file:
-        kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://')
+        kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://', 's3://')
         for kvh in kv_headers:
             if metafile.startswith(kvh):
                 break
@@ -300,14 +302,15 @@ def generate_tensorstore_scales(metafile, mips, **kwargs):
     t0 = time.time()
     logger = logging.get_logger(logger_info)
     mips = np.sort(mips)
+    sec_name = os.path.basename(metafile).replace('.json', '')
     updated = False
     for mip in mips:
         specs = generate_target_tensorstore_scale(metafile, mip=mip, **kwargs)
         if specs is not None:
             updated = True
     if updated:
-        sec_name = os.path.basename(metafile).replace('.json', '')
         logger.info(f'{sec_name}: {(time.time()-t0)/60} min')
+    return {sec_name: updated}
 
 
 def _write_downsample_tensorstore(src_spec, tgt_spec, bboxes, **kwargs):
@@ -320,7 +323,8 @@ def _write_downsample_tensorstore(src_spec, tgt_spec, bboxes, **kwargs):
             continue
         xmin, ymin, xmax, ymax = bbox
         out_view = ts_out[xmin:xmax, ymin:ymax]
-        out_view.write(img.T.reshape(out_view.shape)).result()
+        img = np.swapaxes(img, 0, 1)
+        out_view.write(img.reshape(out_view.shape)).result()
     return ts_out.spec(minimal_spec=True).to_json()
 
 

@@ -20,9 +20,11 @@ def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
     assert len(meta_list)>0, f"did not find any metadata.txt files in {os.path.abspath(meta_dir)}"
     meta_list = meta_list[arg_indx]
     secnames = [os.path.basename(os.path.dirname(s)) for s in meta_list]
+    update_status = {}
     if parallel_within_section or (num_workers == 1):
         for sname in secnames:
-            mip_map_one_section(sname, img_dir, max_mip, num_workers=num_workers, **kwargs)
+            s = mip_map_one_section(sname, img_dir, max_mip, num_workers=num_workers, **kwargs)
+            update_status.update(s)
     else:
         target_func = partial(mip_map_one_section, img_dir=img_dir,
                                 max_mip=max_mip, num_workers=1, **kwargs)
@@ -32,8 +34,10 @@ def generate_stitched_mipmaps(img_dir, max_mip, **kwargs):
                 job = executor.submit(target_func, sname)
                 jobs.append(job)
             for job in jobs:
-                job.result()
+                s = job.result()
+                update_status.update(s)
     logger.info('mipmapping generated.')
+    return update_status
 
 
 def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, **kwargs):
@@ -45,22 +49,26 @@ def generate_stitched_mipmaps_tensorstore(meta_dir, tgt_mips, **kwargs):
     meta_list = sorted(glob.glob(meta_regex))
     assert len(meta_list) > 0, f"did not find any json files in {os.path.abspath(meta_regex)}"
     meta_list = meta_list[arg_indx]
+    update_status = {}
     if parallel_within_section or num_workers == 1:
         for metafile in meta_list:
-            mipmap.generate_tensorstore_scales(metafile, tgt_mips, num_workers=num_workers, **kwargs)
+            s = mipmap.generate_tensorstore_scales(metafile, tgt_mips, num_workers=num_workers, **kwargs)
+            update_status.update(s)
     else:
-        target_func = parallel_within_section(mipmap.generate_tensorstore_scales, mips=tgt_mips, **kwargs)
+        target_func = partial(mipmap.generate_tensorstore_scales, mips=tgt_mips, **kwargs)
         jobs = []
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
             for metafile in meta_list:
                 job = executor.submit(target_func, metafile)
                 jobs.append(job)
             for job in jobs:
-                job.result()
+                s = job.result()
+                update_status.update(s)
     logger.info('mipmapping generated.')
+    return update_status
 
 
-def generate_thumbnails(src_dir, out_dir, **kwargs):
+def generate_thumbnails(src_dir, out_dir, seclist=None, **kwargs):
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = kwargs.pop('logger', None)
     logger = logging.get_logger(logger_info)
@@ -71,13 +79,23 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
     secnames = [os.path.basename(os.path.dirname(s)) for s in meta_list]
     target_func = partial(mipmap.create_thumbnail, **kwargs)
     os.makedirs(out_dir, exist_ok=True)
-    updated = []
+    updated = {}
     if num_workers == 1:
         for sname in secnames:
             outname = os.path.join(out_dir, sname + '.png')
-            if os.path.isfile(outname):
-                continue
-            updated.append(sname)
+            if seclist is None:
+                if os.path.isfile(outname):
+                    continue
+                else:
+                    updated[sname] = True
+            else:
+                if sname not in seclist:
+                    continue
+                elif (seclist[sname]) or (not os.path.isfile(outname)):
+                    updated[sname] = True
+                else:
+                    updated[sname] = False
+                    continue
             sdir = os.path.join(src_dir, sname)
             img_out = target_func(sdir)
             common.imwrite(outname, img_out)
@@ -86,9 +104,19 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=get_context('spawn')) as executor:
             for sname in secnames:
                 outname = os.path.join(out_dir, sname + '.png')
-                if os.path.isfile(outname):
-                    continue
-                updated.append(sname)
+                if seclist is None:
+                    if os.path.isfile(outname):
+                        continue
+                    else:
+                        updated[sname] = True
+                else:
+                    if sname not in seclist:
+                        continue
+                    elif (seclist[sname]) or (not os.path.isfile(outname)):
+                        updated[sname] = True
+                    else:
+                        updated[sname] = False
+                        continue
                 sdir = os.path.join(src_dir, sname)
                 job = executor.submit(target_func, sdir, outname=outname)
                 jobs.append(job)
@@ -98,7 +126,7 @@ def generate_thumbnails(src_dir, out_dir, **kwargs):
     return updated
 
 
-def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
+def generate_thumbnails_tensorstore(src_dir, out_dir, seclist=None, **kwargs):
     num_workers = kwargs.pop('num_workers', 1)
     logger_info = kwargs.pop('logger', None)
     logger = logging.get_logger(logger_info)
@@ -106,14 +134,24 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
     meta_list = meta_list[arg_indx]
     target_func = partial(mipmap.create_thumbnail_tensorstore, **kwargs)
     os.makedirs(out_dir, exist_ok=True)
-    updated = []
+    updated = {}
     if num_workers == 1:
         for meta_name in meta_list:
             sname = os.path.basename(meta_name).replace('.json', '')
             outname = os.path.join(out_dir, sname + '.png')
-            if os.path.isfile(outname):
-                continue
-            updated.append(sname)
+            if seclist is None:
+                if os.path.isfile(outname):
+                    continue
+                else:
+                    updated[sname] = True
+            else:
+                if sname not in seclist:
+                    continue
+                elif (seclist[sname]) or (not os.path.isfile(outname)):
+                    updated[sname] = True
+                else:
+                    updated[sname] = False
+                    continue
             img_out = target_func(meta_name)
             common.imwrite(outname, img_out)
     else:
@@ -122,9 +160,19 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
             for meta_name in meta_list:
                 sname = os.path.basename(meta_name).replace('.json', '')
                 outname = os.path.join(out_dir, sname + '.png')
-                if os.path.isfile(outname):
-                    continue
-                updated.append(sname)
+                if seclist is None:
+                    if os.path.isfile(outname):
+                        continue
+                    else:
+                        updated[sname] = True
+                else:
+                    if sname not in seclist:
+                        continue
+                    elif (seclist[sname]) or (not os.path.isfile(outname)):
+                        updated[sname] = True
+                    else:
+                        updated[sname] = False
+                        continue
                 job = executor.submit(target_func, meta_name, outname=outname)
                 jobs.append(job)
             for job in jobs:
@@ -133,7 +181,7 @@ def generate_thumbnails_tensorstore(src_dir, out_dir, **kwargs):
     return updated
 
 
-def save_mask_for_one_sections(mesh_file, out_name, scale, **kwargs):
+def save_mask_for_one_sections(mesh_file, out_name, resolution, **kwargs):
     from feabas.stitcher import MontageRenderer
     import numpy as np
     from feabas import common
@@ -141,7 +189,7 @@ def save_mask_for_one_sections(mesh_file, out_name, scale, **kwargs):
     fillval = kwargs.get('fillval', 0)
     mask_erode = kwargs.get('mask_erode', 0)
     rndr = MontageRenderer.from_h5(mesh_file)
-    img = 255 - rndr.generate_roi_mask(scale, mask_erode=mask_erode)
+    img = 255 - rndr.generate_roi_mask(resolution, mask_erode=mask_erode)
     common.imwrite(out_name, img)
     if img_dir is not None:
         thumb_name = os.path.join(img_dir, os.path.basename(out_name))
@@ -157,7 +205,7 @@ def save_mask_for_one_sections(mesh_file, out_name, scale, **kwargs):
 
 def generate_thumbnail_masks(mesh_dir, out_dir, seclist=None, **kwargs):
     num_workers = kwargs.get('num_workers', 1)
-    scale = kwargs.get('scale')
+    resolution = kwargs.get('resolution')
     img_dir = kwargs.get('img_dir', None)
     fillval = kwargs.get('fillval', 0)
     mask_erode = kwargs.get('mask_erode', 0)
@@ -167,17 +215,21 @@ def generate_thumbnail_masks(mesh_dir, out_dir, seclist=None, **kwargs):
     mesh_list = sorted(glob.glob(mesh_regex))
     assert len(mesh_list)>0, f"could not find an h5 files in mesh dir: mesh_regex {mesh_regex}"
     mesh_list = mesh_list[arg_indx]
-    target_func = partial(save_mask_for_one_sections, scale=scale, img_dir=img_dir,
+    target_func = partial(save_mask_for_one_sections, resolution=resolution, img_dir=img_dir,
                           fillval=fillval, mask_erode=mask_erode)
     os.makedirs(out_dir, exist_ok=True)
     if num_workers == 1:
         for mname in mesh_list:
             sname = os.path.basename(mname).replace('.h5', '')
             outname = os.path.join(out_dir, sname + '.png')
-            if seclist is None and os.path.isfile(outname):
-                continue
-            elif seclist is not None and sname not in seclist:
-                continue
+            if seclist is None:
+                if os.path.isfile(outname):
+                    continue
+            else:
+                if sname not in seclist:
+                    continue
+                elif (not seclist[sname]) and (os.path.isfile(outname)):
+                    continue
             target_func(mname, outname)
     else:
         jobs = []
@@ -185,10 +237,14 @@ def generate_thumbnail_masks(mesh_dir, out_dir, seclist=None, **kwargs):
             for mname in mesh_list:
                 sname = os.path.basename(mname).replace('.h5', '')
                 outname = os.path.join(out_dir, sname + '.png')
-                if seclist is None and os.path.isfile(outname):
-                    continue
-                elif seclist is not None and sname not in seclist:
-                    continue
+                if seclist is None:
+                    if os.path.isfile(outname):
+                        continue
+                else:
+                    if sname not in seclist:
+                        continue
+                    elif (not seclist[sname]) and (os.path.isfile(outname)):
+                        continue
                 job = executor.submit(target_func, mname, out_name=outname)
                 jobs.append(job)
             for job in jobs:
@@ -289,7 +345,7 @@ if __name__ == '__main__':
         thumbnail_configs = thumbnail_configs['alignment']
         mode = 'alignment'
     else:
-        raise ValueError
+        raise ValueError(f'{args.mode} not supported mode.')
 
     num_workers = thumbnail_configs.get('num_workers', 1)
     if num_workers > num_cpus:
@@ -337,7 +393,7 @@ if __name__ == '__main__':
             thumbnail_configs.setdefault('pattern', pattern)
             thumbnail_configs.setdefault('one_based', one_based)
             thumbnail_configs.setdefault('fillval', fillval)
-            generate_stitched_mipmaps(src_dir0, max_mip, **thumbnail_configs)
+            slist = generate_stitched_mipmaps(src_dir0, max_mip, **thumbnail_configs)
             if thumbnail_configs.get('thumbnail_highpass', True):
                 src_mip = max(0, thumbnail_mip_lvl-2)
                 highpass_inter_mip_lvl = thumbnail_configs.get('highpass_inter_mip_lvl', src_mip)
@@ -355,7 +411,7 @@ if __name__ == '__main__':
                 highpass = False
             thumbnail_configs.setdefault('downsample', downsample)
             thumbnail_configs.setdefault('highpass', highpass)
-            slist = generate_thumbnails(src_dir, img_dir, **thumbnail_configs)
+            slist = generate_thumbnails(src_dir, img_dir, seclist=slist, **thumbnail_configs)
         else:
             stitch_dir = os.path.join(root_dir, 'stitch')
             src_dir = os.path.join(stitch_dir, 'ts_specs')
@@ -376,14 +432,12 @@ if __name__ == '__main__':
                 highpass = False
                 tgt_mips.append(thumbnail_mip_lvl)
                 downsample = 1
-            generate_stitched_mipmaps_tensorstore(src_dir, tgt_mips, **thumbnail_configs)
+            slist = generate_stitched_mipmaps_tensorstore(src_dir, tgt_mips, **thumbnail_configs)
             thumbnail_configs.setdefault('highpass', highpass)
             thumbnail_configs.setdefault('mip', thumbnail_mip_lvl)
-            slist = generate_thumbnails_tensorstore(src_dir, img_dir, **thumbnail_configs)
-        mask_scale = 1 / (2 ** thumbnail_mip_lvl)
-        generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, scale=mask_scale,
-                                 img_dir=img_dir, **thumbnail_configs)
-        generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=None, scale=mask_scale,
+            slist = generate_thumbnails_tensorstore(src_dir, img_dir, seclist=slist, **thumbnail_configs)
+        mask_resolution = config.montage_resolution() * (2 ** thumbnail_mip_lvl)
+        generate_thumbnail_masks(stitch_tform_dir, mat_mask_dir, seclist=slist, resolution=mask_resolution,
                                  img_dir=img_dir, **thumbnail_configs)
         logger.info('finished thumbnail downsample.')
         logging.terminate_logger(*logger_info)
@@ -394,7 +448,7 @@ if __name__ == '__main__':
         logger_info = logging.initialize_main_logger(logger_name='thumbnail_align', mp=num_workers>1)
         thumbnail_configs['logger'] = logger_info[0]
         logger= logging.get_logger(logger_info[0])
-        resolution = config.DEFAULT_RESOLUTION * (2 ** thumbnail_mip_lvl)
+        resolution = config.montage_resolution() * (2 ** thumbnail_mip_lvl)
         thumbnail_configs.setdefault('resolution', resolution)
         thumbnail_configs.setdefault('feature_match_dir', feature_match_dir)
         img_regex = os.path.abspath(os.path.join(img_dir, '*.png'))
@@ -412,7 +466,10 @@ if __name__ == '__main__':
         thumbnail_configs.setdefault('region_labels', region_labels)
         pairnames = []
         match_name_delimiter = thumbnail_configs.get('match_name_delimiter', '__to__')
-        for stp in range(1, compare_distance+1):
+        processed = []
+        if not hasattr(compare_distance, '__iter__'):
+            compare_distance = range(1, compare_distance+1)
+        for stp in compare_distance:
             for k in range(len(bname_list)-stp):
                 sname0_ext = bname_list[k]
                 sname1_ext = bname_list[k+stp]
@@ -420,8 +477,12 @@ if __name__ == '__main__':
                 sname1 = os.path.splitext(sname1_ext)[0]
                 outname = os.path.join(match_dir, sname0 + match_name_delimiter + sname1 + '.h5')
                 if os.path.isfile(outname):
-                    continue
+                    processed.append(True)
+                else:
+                    processed.append(False)
                 pairnames.append((sname0_ext, sname1_ext))
+        if len(pairnames) == len(pairnames[arg_indx]):
+            pairnames = [s for p, s in zip(processed, pairnames) if not p]
         pairnames.sort()
         pairnames = pairnames[arg_indx]
         target_func = partial(align_thumbnail_pairs, image_dir=img_dir, out_dir=match_dir,

@@ -236,7 +236,10 @@ class Mesh:
         self._vertices[const.MESH_GEAR_STAGING] = kwargs.get('staging_vertices', None)
         self._offsets = {}
         self._offsets[const.MESH_GEAR_INITIAL] = kwargs.get('initial_offset', np.zeros((1,2), dtype=np.float64))
-        self._offsets[const.MESH_GEAR_FIXED] = kwargs.get('fixed_offset', np.zeros((1,2), dtype=np.float64))
+        if ('fixed_vertices' not in kwargs) and ('fixed_offset' not in kwargs):
+            self._offsets[const.MESH_GEAR_FIXED] = kwargs.get('initial_offset', np.zeros((1,2), dtype=np.float64))
+        else:
+            self._offsets[const.MESH_GEAR_FIXED] = kwargs.get('fixed_offset', np.zeros((1,2), dtype=np.float64))
         self._offsets[const.MESH_GEAR_MOVING] = kwargs.get('moving_offset', np.zeros((1,2), dtype=np.float64))
         self._offsets[const.MESH_GEAR_STAGING] = kwargs.get('staging_offset', np.zeros((1,2), dtype=np.float64))
         self._current_gear = const.MESH_GEAR_FIXED
@@ -560,6 +563,7 @@ class Mesh:
         init_dict['epsilon'] = self._epsilon
         if bool(self._name):
             init_dict['name'] = self._name
+        init_dict['locked'] = self.locked
         init_dict['token'] = self.token
         init_dict['uid'] = self.uid
         init_dict['soft_factor'] = self.soft_factor
@@ -798,6 +802,62 @@ class Mesh:
         return self.__class__(**init_dict)
 
 
+    @config_cache('TBD')
+    def _coarse_mesh_grids(self, mesh_reduction_factor=0, gear=const.MESH_GEAR_INITIAL):
+        """remember to clear cache when mesh_reduction_factor changes."""
+        ntri0 = self.num_triangles
+        ntri = self.num_triangles * mesh_reduction_factor
+        if ntri < 3:
+            mesh_reduction_factor = 0 # if too coarse, use a single affine
+        mask = self.shapely_regions(gear=gear, offsetting=False)
+        m_area = mask.area
+        if mesh_reduction_factor == 0:
+            mbc = shapely.minimum_bounding_circle(mask)
+            cntr = np.array(mbc.centroid.coords)
+            rr = np.sum((np.array(mbc.boundary.coords) - cntr) ** 2, axis=-1) ** 0.5
+            radius = 2 * np.max(rr) * 1.001
+            theta = np.pi / 2 + np.arange(3) * np.pi * 2 / 3
+            dd = np.stack((np.cos(theta), np.sin(theta)), axis=-1) * radius
+            vtx = cntr + dd
+            T = np.array((0,1,2)).reshape(1,3)
+            soft_factor = m_area / (3*(3**0.5)*(radius)**2/4)
+        else:
+            area_ele = m_area / (mesh_reduction_factor * ntri0)
+            side_len = (area_ele * 4 / 3**0.5) ** 0.5
+            vtx = spatial.generate_equilat_grid_mask(mask, side_len)
+            T = triangle.delaunay(vtx)
+            edges = Mesh.triangle2edge(T, directional=True)
+            edge_len = np.sum(np.diff(vtx[edges], axis=-2)**2, axis=-1)**0.5
+            indx = ~np.any(edge_len.reshape(3, -1) > 1.25 * side_len, axis=0)
+            T = T[indx]
+            soft_factor = m_area / (area_ele * T.shape[0])
+        return vtx, T, soft_factor
+
+
+    def coarse_mesh(self, mesh_reduction_factor=0, gear=const.MESH_GEAR_INITIAL, **kwargs):
+        """
+        generate a coarse mesh covering this mesh (in specified gear) with
+        uniform equilateral elements. It is to be used for a inital relaxation
+        at coarse level before the optimization step. The coarse mesh will be
+        stored to INITIAL_GEAR and leave rest of gears unspecified. After
+        optimization, the relaxed results should be written to MOVING_GEAR.
+        
+        Args:
+            mesh_reduction_factor (float): scale applied to the mesh granuality.
+                e.g. when set to 0.01, then the coarse mesh should have ~1%
+                triangles. If set to 0, then it'll become one triangle (model
+                affine tform).
+        """
+        cache = kwargs.get('cache', False)
+        vtx, T, soft_factor = self._coarse_mesh_grids(mesh_reduction_factor=mesh_reduction_factor, gear=gear, cache=cache)
+        init_dict = self.get_init_dict(save_material=False, vertex_flags=(const.MESH_GEAR_INITIAL,))
+        init_dict.update({'vertices': vtx, 'triangles': T, 'initial_offset': self.offset(gear=gear)})
+        init_dict['soft_factor'] = self.soft_factor * soft_factor
+        init_dict.pop('stiffness_multiplier', None)
+        init_dict.pop('token')
+        return self.__class__(**init_dict)
+
+
   ## -------------------------- manipulate meshes -------------------------- ##
     def delete_vertices(self, vidx):
         """delete vertices indexed by vidx"""
@@ -929,6 +989,7 @@ class Mesh:
         self._stiffness_multiplier = stiffness_multiplier
         self._material_ids = material_ids
         self.delete_orphaned_vertices()
+        self._vertices_changed(gear=const.MESH_GEAR_INITIAL)
         return self
 
 

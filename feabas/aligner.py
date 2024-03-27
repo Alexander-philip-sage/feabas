@@ -19,7 +19,7 @@ from feabas.matcher import section_matcher
 from feabas.optimizer import SLM
 import feabas.constant as const
 from feabas.common import str_to_numpy_ascii, Match, rearrange_section_order
-from feabas.config import DEFAULT_RESOLUTION
+from feabas.config import montage_resolution
 
 
 def read_matches_from_h5(match_name, target_resolution=None):
@@ -67,7 +67,7 @@ def match_section_from_initial_matches(match_name, meshes, loaders, out_dir, con
         raise TypeError('configuration type not supported.')
     match_name_delimiter = conf.get('match_name_delimiter', '__to__')
     working_mip_level = conf.get('working_mip_level', 0)
-    resolution = DEFAULT_RESOLUTION * (2 ** working_mip_level)
+    resolution = montage_resolution() * (2 ** working_mip_level)
     loader_config = conf.get('loader_config', {}).copy()
     matcher_config = conf.get('matcher_config', {}).copy()
     secnames = os.path.splitext(os.path.basename(match_name))[0].split(match_name_delimiter)
@@ -172,7 +172,7 @@ class Stack:
         mesh_cache = kwargs.get('mesh_cache', {})
         link_cache = kwargs.get('link_cache', {})
         mip_level = kwargs.get('mip_level', 0)
-        self._resolution = DEFAULT_RESOLUTION * (2 ** mip_level)
+        self._resolution = montage_resolution() * (2 ** mip_level)
         self._mesh_cache = OrderedDict()
         self._mesh_cache.update(mesh_cache)
         self._link_cache = OrderedDict()
@@ -196,6 +196,7 @@ class Stack:
                 else:
                     raise RuntimeError('no match list found.')
         self.match_list = self.filtered_match_list(match_list=match_list)
+        self.save_overflow = kwargs.get('save_overflow', True)
         self._logger = None
 
 
@@ -279,7 +280,7 @@ class Stack:
         """self._mesh_cache is a FIFO cache"""
         cached_name, cached_Ms = self._mesh_cache.popitem(last=False)
         rel_match_names = self.secname_to_matchname_mapper[cached_name]
-        if self._mesh_out_dir is not None:
+        if (self._mesh_out_dir is not None) and self.save_overflow:
             anchored_meshes = [m for m in cached_Ms if not m.is_outcast]
             if len(anchored_meshes) != len(cached_Ms):
                 logger = logging.get_logger(self._logger)
@@ -524,7 +525,7 @@ class Stack:
                 optm.anneal(gear=(target_gear, const.MESH_GEAR_FIXED), mode=const.ANNEAL_CONNECTED_RIGID)
         if optimize_elastic:
             if 'callback_settings' in elastic_params:
-                elastic_params['callback_settings'].setdefault('early_stop_thresh', DEFAULT_RESOLUTION / self._resolution)
+                elastic_params['callback_settings'].setdefault('early_stop_thresh', montage_resolution() / self._resolution)
             cost = optm.optimize_elastic(target_gear=target_gear, **elastic_params)
             if (residue_mode is not None) and (residue_len > 0):
                 if residue_mode == 'huber':

@@ -24,7 +24,7 @@ from feabas.optimizer import SLM
 from feabas import common, caching
 from feabas.spatial import scale_coordinates
 import feabas.constant as const
-from feabas.config import DEFAULT_RESOLUTION, general_settings
+from feabas.config import DEFAULT_RESOLUTION, SECTION_THICKNESS, data_resolution
 
 class Stitcher:
     """
@@ -69,6 +69,8 @@ class Stitcher:
     @classmethod
     def from_coordinate_file(cls, filename, **kwargs):
         imgpaths, bboxes, root_dir, resolution = common.parse_coordinate_files(filename, **kwargs)
+        if resolution is None:
+            resolution = data_resolution()
         return cls(imgpaths, bboxes, root_dir=root_dir, resolution=resolution)
 
 
@@ -93,7 +95,7 @@ class Stitcher:
             if 'resolution' in f:
                 resolution = f['resolution'][()]
             else:
-                resolution = DEFAULT_RESOLUTION
+                resolution = data_resolution()
         if selected is not None:
             imgpaths = [s for k, s in enumerate(imgpaths) if k in selected]
             bboxes = bboxes[selected]
@@ -705,7 +707,7 @@ class Stitcher:
         residue_threshold = kwargs.get('residue_threshold', None)
         if self._optimizer is None:
             self.initialize_optimizer()
-        self._optimizer.optimize_translation_lsqr(maxiter=maxiter, tol=tol,
+        cost0 = self._optimizer.optimize_translation_lsqr(maxiter=maxiter, tol=tol,
             start_gear=start_gear, target_gear=target_gear)
         num_disabled = 0
         if (residue_threshold is not None) and (residue_threshold > 0):
@@ -732,9 +734,62 @@ class Stitcher:
                             self._optimizer.links[lnk_k].disable()
                             num_disabled += 1
                         uid_record.update(lnk_uids)
-                    self._optimizer.optimize_translation_lsqr(maxiter=maxiter,
+                    cost1 = self._optimizer.optimize_translation_lsqr(maxiter=maxiter,
                         tol=tol,start_gear=start_gear, target_gear=target_gear)
-        return num_disabled
+                    if cost1[1] >= cost1[0]:
+                        break
+                    else:
+                        cost0 = (cost0[0], min(cost1[1], cost0[1]))
+        return num_disabled, cost0
+
+
+    def optimize_affine(self, **kwargs):
+        """
+        optimize with coarse transformations (affine by default) for each tile.
+        Kwargs:
+            mesh_reduction_factor: scale to reduce mesh element number. 0 by
+                default for affine.
+            use_groupings: whether to enforce groupings during mesh relaxation.
+                True by default.
+            maxiter: maximum number of iterations. None if no limit.
+            tol: the stopping tolerance of the least-square iterations.
+            stiffness_multiplier: multiplier to make the affines more regulated.
+            start_gear: gear that associated with the vertices before applying
+                the translation.
+            target_gear: gear that associated with the vertices at the final
+                postions for locked meshes. Also the results are saved to this
+                gear as well.
+        """
+        mesh_reduction_factor = kwargs.get('mesh_reduction_factor', 0)
+        use_groupings = kwargs.get('use_groupings', True) and self.has_groupings
+        maxiter = kwargs.get('maxiter', None)
+        tol = kwargs.get('tol', 1e-06)
+        stiffness_multiplier = kwargs.get('stiffness_multiplier', 1.0)
+        target_gear = kwargs.get('target_gear', const.MESH_GEAR_FIXED)
+        start_gear = kwargs.get('start_gear', target_gear)
+        if maxiter == 0:
+            return
+        if self._optimizer is None:
+            self.initialize_optimizer()
+        shared_cache = caching.CacheFIFO(maxlen=None)
+        stiffness_lambda = self._optimizer._stiffness_lambda * stiffness_multiplier
+        opt_c = self._optimizer.coarse_mesh_SLM(mesh_reduction_factor=mesh_reduction_factor,
+                                                target_gear=target_gear, start_gear=start_gear,
+                                                shared_cache=shared_cache, stiffness_lambda=stiffness_lambda)
+        shared_cache.clear()
+        if use_groupings:
+            groupings = self.groupings(normalize=True)
+        else:
+            groupings = None
+        cost = opt_c.optimize_linear(maxiter=maxiter, tol=tol,
+                              shape_gear=const.MESH_GEAR_FIXED,
+                              target_gear = const.MESH_GEAR_MOVING,
+                              start_gear = const.MESH_GEAR_FIXED,
+                              groupings=groupings)
+        if cost[1] < cost[0]:
+            self._optimizer.apply_coarse_relaxation_results(opt_c, start_gear=start_gear, target_gear=target_gear)
+        return cost
+
 
 
     def optimize_group_intersection(self, **kwargs):
@@ -1034,7 +1089,7 @@ class MontageRenderer:
             root directory.
     """
     def __init__(self, imgpaths, mesh_info, tile_sizes, **kwargs):
-        self.resolution = kwargs.get('resolution', DEFAULT_RESOLUTION)
+        self.resolution = kwargs.get('resolution', data_resolution())
         self._loader_settings = kwargs.get('loader_settings', {}).copy()
         self._connected_subsystem = kwargs.get('connected_subsystem', None)
         if bool(kwargs.get('root_dir', None)):
@@ -1353,7 +1408,7 @@ class MontageRenderer:
         else:
             if not prefix.endswith('/'):
                 prefix = prefix + '/'
-            kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://')
+            kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://', 's3://')
             for kvh in kv_headers:
                 if prefix.startswith(kvh):
                     break
@@ -1374,7 +1429,7 @@ class MontageRenderer:
                     "inclusive_min": [0, 0, 0, 0],
                     "labels": ["x", "y", "z", "channel"]
                 },
-                "dimension_units": [[resolution, "nm"], [resolution, "nm"], [general_settings().get('section_thickness', 30), "nm"], None],
+                "dimension_units": [[resolution, "nm"], [resolution, "nm"], [SECTION_THICKNESS, "nm"], None],
                 "dtype": np.dtype(dtype).name,
                 "rank" : 4
             }
@@ -1484,7 +1539,7 @@ class MontageRenderer:
             return self._tile_sizes[indx]
 
 
-    def generate_roi_mask(self, scale, show_conn=False, mask_erode=0):
+    def generate_roi_mask(self, resolution, show_conn=False, mask_erode=0):
         """
         generate low resolution roi mask that can fit in a single image.
         """
@@ -1492,6 +1547,7 @@ class MontageRenderer:
         for msh in self._mesh_rtree_generator():
             _, bbox, _ = msh
             bboxes0.append(bbox)
+        scale = self.resolution / resolution
         bboxes = scale_coordinates(np.array(bboxes0), scale).clip(0, None)
         bboxes = np.round(bboxes).astype(np.int32)
         imgwd, imght = np.max(bboxes[:,-2:], axis=0) + 2

@@ -49,10 +49,13 @@ def match_main(coord_list, out_dir, **kwargs):
 def optimize_one_section(matchname, outname, **kwargs):
     from feabas.stitcher import Stitcher
     import numpy as np
+    if os.path.isfile(outname):
+        return
     use_group = kwargs.get('use_group', True)
     msem = kwargs.get('msem', False)
     mesh_settings = kwargs.get('mesh_settings', {})
     translation_settings = kwargs.get('translation', {})
+    affine_settings = kwargs.get('affine', {})
     group_elastic_settings = kwargs.get('group_elastic', {})
     elastic_settings = kwargs.get('final_elastic', {})
     disconnected_settings = kwargs.get('disconnected_assemble', {})
@@ -80,16 +83,21 @@ def optimize_one_section(matchname, outname, **kwargs):
     mesh_settings = mesh_settings.copy()
     mesh_sizes = mesh_settings.pop('mesh_sizes', [75, 150, 300])
     stitcher.initialize_meshes(mesh_sizes, **mesh_settings)
-    discrd =stitcher.optimize_translation(target_gear=feabas.MESH_GEAR_FIXED, **translation_settings)
+    discrd, cost = stitcher.optimize_translation(target_gear=feabas.MESH_GEAR_FIXED, **translation_settings)
     dis = stitcher.match_residues()
     logger.info(f'{bname}: residue after translation {np.nanmean(dis)} | discarded {discrd}')
-    if use_group:
+    if affine_settings.get('maxiter', 0) != 0:
+        cost=stitcher.optimize_affine(target_gear=feabas.MESH_GEAR_FIXED, **affine_settings)
+        dis = stitcher.match_residues()
+        logger.info(f'{bname}: residue after affine {np.nanmean(dis)} | cost {cost}')
+    if use_group and (group_elastic_settings.get('maxiter', 0) != 0):
         stitcher.optimize_group_intersection(target_gear=feabas.MESH_GEAR_FIXED, **group_elastic_settings)
         stitcher.optimize_translation(target_gear=feabas.MESH_GEAR_FIXED, **translation_settings)
         cost = stitcher.optimize_elastic(use_groupings=True, target_gear=feabas.MESH_GEAR_FIXED, **group_elastic_settings)
         dis = stitcher.match_residues()
         logger.info(f'{bname}: residue after grouped relaxation {np.nanmean(dis)} | cost {cost}')
-    cost = stitcher.optimize_elastic(target_gear=feabas.MESH_GEAR_MOVING, **elastic_settings)
+    if elastic_settings.get('maxiter', 0) != 0:
+        cost = stitcher.optimize_elastic(target_gear=feabas.MESH_GEAR_MOVING, **elastic_settings)
     rot, _ = stitcher.normalize_coordinates(**normalize_setting)
     N_conn = stitcher.connect_isolated_subsystem(**disconnected_settings)
     if N_conn > 1:
@@ -195,7 +203,7 @@ def render_one_section(tform_name, out_prefix, meta_name=None, **kwargs):
     if (meta_name is not None) and (len(metadata) > 0):
         if use_tensorstore:
             meta_name = meta_name.replace('\\', '/')
-            kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://')
+            kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://', 's3://')
             for kvh in kv_headers:
                 if meta_name.startswith(kvh):
                     break
@@ -277,9 +285,11 @@ if __name__ == '__main__':
     elif args.mode.lower().startswith('o'):
         stitch_configs = stitch_configs['optimization']
         mode = 'optimization'
-    else:
+    elif args.mode.lower().startswith('m'):
         stitch_configs = stitch_configs['matching']
         mode = 'matching'
+    else:
+        raise ValueError(f'{args.mode} not supported mode.')
     num_workers = stitch_configs.get('num_workers', 1)
     if num_workers > num_cpus:
         num_workers = num_cpus

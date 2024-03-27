@@ -8,7 +8,6 @@ from scipy import sparse
 from scipy.ndimage import gaussian_filter1d
 import scipy.sparse.csgraph as csgraph
 
-from feabas.config import DEFAULT_RESOLUTION
 
 
 Match = namedtuple('Match', ('xy0', 'xy1', 'weight'))
@@ -16,7 +15,7 @@ Match = namedtuple('Match', ('xy0', 'xy1', 'weight'))
 
 def imread(path, **kwargs):
     flag = kwargs.get('flag', cv2.IMREAD_UNCHANGED)
-    if path.startswith('gs://'):
+    if path.startswith('gs://') or path.startswith('s3://') or path.startswith('http://') or path.startswith('https://'):
         if path.lower().endswith('.png'):
             driver = 'png'
         elif path.lower().endswith('.bmp'):
@@ -47,6 +46,8 @@ def imread(path, **kwargs):
         except ValueError:
             img = None
     else:
+        if path.startswith('file://'):
+            path = path.replace('file://', '')
         img = cv2.imread(path, flag)
     return img
 
@@ -64,6 +65,8 @@ def imwrite(path, image):
         blob = bucket.blob(relpath)
         blob.upload_from_string(encoded_img.tobytes(), content_type='image/png')
     else:
+        if path.startswith('file://'):
+            path = path.replace('file://', '')
         return cv2.imwrite(path, image)
 
 
@@ -378,7 +381,9 @@ def crop_image_from_bbox(img, bbox_img, bbox_out, **kwargs):
             else:
                 return None
     if flip_indx:
-        cropped = img[(xmin-x0):(xmax-x0), (ymin-y0):(ymax-y0), ...].transpose()
+        dims = list(range(len(img.shape)))
+        dims[:2] = [1,0]
+        cropped = img[(xmin-x0):(xmax-x0), (ymin-y0):(ymax-y0), ...].transpose(dims)
     else:
         cropped = img[(ymin-y0):(ymax-y0), (xmin-x0):(xmax-x0), ...]
     dimpad = len(img.shape) - 2
@@ -526,7 +531,7 @@ def parse_coordinate_files(filename, **kwargs):
     root_dir = kwargs.get('root_dir', None)
     tile_size = kwargs.get('tile_size', None)
     delimiter = kwargs.get('delimiter', '\t') # None for any whitespace
-    resolution = kwargs.get('resolution', DEFAULT_RESOLUTION)
+    resolution = kwargs.get('resolution', None)
     imgpaths = []
     bboxes = []
     with open(filename, 'r') as f:

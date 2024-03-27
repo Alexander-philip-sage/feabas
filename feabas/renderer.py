@@ -17,7 +17,7 @@ from feabas.caching import CacheFIFO
 import feabas.constant as const
 from feabas.mesh import Mesh
 from feabas import common, spatial, dal, logging
-from feabas.config import DEFAULT_RESOLUTION, general_settings
+from feabas.config import DEFAULT_RESOLUTION, SECTION_THICKNESS, montage_resolution
 
 
 class MeshRenderer:
@@ -492,7 +492,7 @@ class MeshRenderer:
             imgt = common.masked_dog_filter(imgt, log_sigma, mask=mask)
             if len(imgt.shape) > 2:
                 imgt = np.moveaxis(imgt, 0, -1)
-        if self._geodesic_info:
+        if (self._geodesic_mask) and (imgt is not None):
             dtp = imgt.dtype
             kk = 2
             weight = (np.arctan((weight - 0.5)*2*kk*np.pi) + np.arctan(kk*np.pi)) / (2*np.arctan(kk*np.pi))
@@ -591,7 +591,7 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
         bboxes_out = []
         if not prefix.endswith('/'):
             prefix = prefix + '/'
-        kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://')
+        kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://', 's3://')
         for kvh in kv_headers:
             if prefix.startswith(kvh):
                 break
@@ -612,11 +612,11 @@ def render_whole_mesh(mesh, image_loader, prefix, **kwargs):
                 "inclusive_min": [0, 0, 0, 0],
                 "labels": ["x", "y", "z", "channel"]
             },
-            "dimension_units": [[mesh.resolution, "nm"], [mesh.resolution, "nm"], [general_settings().get('section_thickness', 30), "nm"], None],
+            "dimension_units": [[mesh.resolution, "nm"], [mesh.resolution, "nm"], [SECTION_THICKNESS, "nm"], None],
             "dtype": np.dtype(dtype).name,
             "rank" : 4
         }
-        mip_level_str = str(int(np.log(mesh.resolution/DEFAULT_RESOLUTION)/np.log(2)))
+        mip_level_str = str(int(np.log(mesh.resolution/montage_resolution())/np.log(2)))
         if driver == 'zarr':
             ts_specs = {
                 "driver": "zarr",
@@ -828,14 +828,14 @@ class VolumeRenderer:
         self._offset = kwargs.get('out_offset', np.zeros((1,2), dtype=np.int64))
         self._canvas_bbox = kwargs.get('canvas_bbox', None)
         self._ts_verified = False
-        self.resolution = kwargs.get('resolution', DEFAULT_RESOLUTION)
-        self.mip = int(np.log2(self.resolution / DEFAULT_RESOLUTION))
+        self.resolution = kwargs.get('resolution', montage_resolution())
+        self.mip = int(np.log2(self.resolution / montage_resolution()))
         self._number_of_channels = kwargs.get('number_of_channels', None)
         self._dtype = kwargs.get('dtype', None)
         self._chunk_shape = kwargs.get('chunk_shape', (1024, 1024, 16))
         self._read_chunk_shape = kwargs.get('read_chunk_shape', self._chunk_shape)
         schema = {'dimension_units': [[self.resolution, "nm"], [self.resolution, "nm"],
-                                      [general_settings().get('section_thickness', 30), "nm"], None]}
+                                      [SECTION_THICKNESS, "nm"], None]}
         self._ts_spec = {'driver': driver, 'kvstore': kvstore, 'schema': schema}
 
 
@@ -857,7 +857,7 @@ class VolumeRenderer:
         zz = zz[(zz >= np.min(self._zindx)) & (zz <= np.max(self._zindx))]
         if zz.size == 0:
             return render_seriers
-        xmin, ymin, xmax, ymax = self.canvas_box
+        xmin, ymin, xmax, ymax = self.canvas_bbox
         x0_mn = np.arange((xmin//chunk_x) * chunk_x, xmax, chunk_x)
         y0_mn = np.arange((ymin//chunk_y) * chunk_y, ymax, chunk_y)
         xx_mn, yy_mn = np.meshgrid(x0_mn, y0_mn)
@@ -980,7 +980,7 @@ class VolumeRenderer:
                 for zz, nn in rendered.items():
                     if (nn is not None) and (nn > 0):
                         flg_name = os.path.join(self.flag_dir, str(zz)+'.json')
-                        kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://')
+                        kv_headers = ('gs://', 'http://', 'https://', 'file://', 'memory://', 's3://')
                         for kvh in kv_headers:
                             if flg_name.startswith(kvh):
                                 break
@@ -994,7 +994,7 @@ class VolumeRenderer:
 
 
     @property
-    def canvas_box(self):
+    def canvas_bbox(self):
         if self._canvas_bbox is None:
             bbox_union = None
             for rm in self.region_generator():
@@ -1009,7 +1009,8 @@ class VolumeRenderer:
                     bbox_union = bbox
                 else:
                     bbox_union = common.bbox_union((bbox_union, bbox))
-            self._canvas_box = bbox_union
+            self._canvas_bbox = bbox_union
+            self._offset = -bbox_union[:2].reshape(1,2)
         return self._canvas_bbox
 
 
@@ -1089,7 +1090,9 @@ class VolumeRenderer:
                 self._chunk_shape = dataset.schema.chunk_layout.write_chunk.shape[:3]
             except ValueError:
                 spec_copy.update({'create': True})
-                xmin, ymin, xmax, ymax = self.canvas_box
+                xmin, ymin, xmax, ymax = self.canvas_bbox
+                _offset = self._offset.ravel()
+                xmin, ymin, xmax, ymax = xmin + _offset[0], ymin + _offset[1], xmax + _offset[0], ymax + _offset[1]
                 zmin, zmax = np.min(self._zindx), np.max(self._zindx) + 1
                 if (self._zmin is not None) and zmin > self._zmin:
                     zmin = self._zmin
@@ -1216,11 +1219,13 @@ def subprocess_render_partial_ts_slab(loaders, meshes, bboxes, out_ts, **kwargs)
     ts_xmax, ts_ymax = exclusive_max[0], exclusive_max[1]
     ts_bbox = (ts_xmin, ts_ymin, ts_xmax, ts_ymax)
     for bbox, bbox_out in zip(bboxes, bboxes_out):
-        try:    # http error may crash the program
-            updated = False
-            for z in zindx:
+        updated = False
+        for z in zindx:
+            try:    # http error may crash the program
                 rndr = renderers[z]
                 if rndr is None:
+                    continue
+                if num_chunks.get(z, 0) == None: # previously errored out
                     continue
                 imgt = rndr.crop(bbox, **kwargs)
                 if (imgt is not None) and np.any(imgt != fillval, axis=None):
@@ -1234,6 +1239,9 @@ def subprocess_render_partial_ts_slab(loaders, meshes, bboxes, out_ts, **kwargs)
                     data_view = out_ts[indx[1], indx[0], z]
                     data_view.with_transaction(txn).write(img_crp.reshape(data_view.shape)).result()
                     num_chunks[z] = num_chunks.get(z, 0) + 1
+            except Exception:
+                num_chunks[z] = None
+        try:
             if updated:
                 txn.commit_async().result()
         except Exception:

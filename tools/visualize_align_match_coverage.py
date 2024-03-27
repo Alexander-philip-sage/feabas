@@ -42,10 +42,10 @@ if __name__ == '__main__':
     thumbnail_configs = config.thumbnail_configs()
     delimiter = thumbnail_configs.get('alignment', {}).get('match_name_delimiter', '__to__')
     thumb_mip = thumbnail_configs.get('thumbnail_mip_level', 6)
-    thumb_res = config.DEFAULT_RESOLUTION * (2 ** thumb_mip)
+    thumb_res = config.montage_resolution() * (2 ** thumb_mip)
     align_configs = config.align_configs()
     align_mip = align_configs.get('matching', {}).get('working_mip_level', 2)
-    blksz = align_configs.get('matching', {}).get('spacings', [100])[-1]
+    blksz = align_configs.get('matching', {}).get('matcher_config',{}).get('spacings', [100])[-1]
     blksz = int(np.ceil(blksz * 2 ** (align_mip - thumb_mip)))
     skel = np.ones((blksz, blksz), np.uint8)
     ds = 2

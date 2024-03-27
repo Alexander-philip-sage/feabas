@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import platform
 
-VERSION = '2.0.2'
+VERSION = '2.1.0'
 
 def readme():
     with open('README.md') as f:
@@ -18,7 +18,7 @@ install_requires = [
     'scikit-image',
     'scipy',
     'shapely>=2.0.0',
-    'tensorstore',
+    'tensorstore<=0.1.51',
     'triangle',
 ]
 
